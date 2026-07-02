@@ -1,0 +1,7 @@
+# Doc-build tooling for CI (pinned to what renders the site correctly today).
+# Notebooks are committed pre-rendered (mkdocs-jupyter execute:false), so this is
+# all CI needs — no GPU, no m3 install.
+mkdocs==1.6.1
+mkdocs-material==9.7.6
+mkdocs-jupyter==0.26.3
+pymdown-extensions==10.21.3

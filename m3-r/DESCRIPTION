@@ -1,0 +1,42 @@
+Package: m3
+Type: Package
+Title: Multimodal, Multi-Batch, Condition-Aware Single-Cell Modelling
+Version: 0.3.0
+Authors@R: c(
+    person("Sichang", "Ding", role = c("aut", "cre"), email = "usyddsc@gmail.com"))
+Description: R interface to m3, a multimodal (RNA, ADT, ATAC), multi-batch,
+    condition-aware single-cell model. Trains an integration variational
+    autoencoder for batch-corrected, condition-disentangled cell embeddings and,
+    on top of it, an adversarial donor-level disease predictor; it also explains
+    predictions by end-to-end integrated gradients and augments cohorts with
+    synthetic donors and cells. The PyTorch implementation (the 'm3-sc' Python package)
+    is bundled and driven via 'reticulate' inside a 'basilisk'-managed environment, operating on SingleCellExperiment and
+    MultiAssayExperiment objects and returning results as objects. Numerics are
+    identical to the Python package for a given seed, device and library
+    versions.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports:
+    methods,
+    basilisk,
+    reticulate,
+    S4Vectors,
+    SummarizedExperiment,
+    SingleCellExperiment,
+    stats
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    ggplot2,
+    Matrix,
+    MultiAssayExperiment,
+    Seurat,
+    uwot
+SystemRequirements: Python (>= 3.10)
+biocViews: SingleCell, DimensionReduction, Classification, FeatureExtraction,
+    NeuralNetwork, BatchEffect, Software
+Config/testthat/edition: 3
+StagedInstall: no
+Config/roxygen2/version: 7.3.2
+RoxygenNote: 7.3.3

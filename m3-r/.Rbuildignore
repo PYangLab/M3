@@ -1,0 +1,9 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.git$
+^\.gitignore$
+^WORKLOG\.md$
+^inst/python/m3/.*/__pycache__$
+^inst/python/.*\.pyc$
+^_pkgdown\.yml$
+^\.DS_Store$

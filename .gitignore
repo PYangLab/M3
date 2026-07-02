@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# R
+.Rproj.user/
+.Rhistory
+.RData
+*.tar.gz
+
+# MkDocs
+website/site/
+website/.cache/
+
+# OS
+.DS_Store
+
+# NOTE: rendered tutorials (website/docs/notebooks/*.ipynb, r_*_media/) and the
+# packaged demo data (*.h5ad under datasets/_data) are TRACKED on purpose —
+# CI builds the docs from these without re-running the models.
+
+# build cache (mkdocs-jupyter, etc.)
+.cache/

@@ -1,0 +1,49 @@
+# GitHub Pages deploy for the m3 docs (PUBLIC repo).
+# Place this file at:  <repo-root>/.github/workflows/deploy.yml
+# One-time setup:  repo Settings → Pages → Source = "GitHub Actions".
+#
+# Notebooks are committed already rendered (mkdocs-jupyter execute:false), so CI
+# needs NO GPU and NO m3 install — it only builds the committed docs tree.
+#
+# Path assumption below: the mkdocs project lives under  website/  in the repo.
+# If you instead put mkdocs.yml at the repo root, drop the "-f website/mkdocs.yml"
+# flag, change the requirements path, and set  path: site  in upload-pages-artifact.
+name: Deploy docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r website/requirements-docs.txt
+      - run: mkdocs build --strict -f website/mkdocs.yml
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

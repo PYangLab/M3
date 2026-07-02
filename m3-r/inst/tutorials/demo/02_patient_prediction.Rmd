@@ -1,0 +1,145 @@
+---
+title: "Donor-level disease prediction"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE, warning = FALSE)
+library(ggplot2)
+```
+
+m3's headline task: predict **donor/patient-level disease status** from multimodal
+single-cell data, in a **leak-safe leave-one-batch-out** setting. We hold out one
+batch (`B3`); its donors' disease labels are masked during training and
+predicted at the end. One `m3_model` trains the integration VAE **and** the
+donor-level adversarial predictor; `m3_predict_donors()` returns per-donor class
+probabilities.
+
+```{r libs}
+library(m3)
+set.seed(0)
+data <- m3_demo()
+data
+```
+
+## 2. Build + train the model with a held-out batch
+
+`held_out = "B3"` designates the query batch (leak-safe: its `cond_group`
+labels are masked). `donor_key` + `celltype_key` enable the donor predictor;
+`batch_key` is the site column whose effect the donor-level adversary removes;
+`target_condition` is the disease axis to predict. The donor-predictor knobs are
+the real engine hyperparameters used for the Liu figures.
+
+```{r train}
+model <- m3_train(
+  data,
+  condition_keys   = c("cond_group", "Age_interval"),
+  target_condition = "cond_group",
+  celltype_key     = "mergedcelltype",
+  batch_key        = "batch",
+  donor_key        = "sample_id",
+  held_out         = "B3",
+  embedding_dim    = 30L,
+  max_epochs       = 500L,
+  donor_predictor  = list(glr = 3e-3, n_epochs = 120L, adv_max = 10L,
+                          adv_warmup = 7L, n_disc = 21L, patient_w = 10L),
+  seed = 0L
+)
+cat("reference vocab (query labels never enter it):",
+    paste(m3_reference_vocab(model)$cond_group, collapse = ", "), "\n")
+```
+
+## 3. Predict the held-out donors
+
+```{r predict}
+preds <- m3_predict_donors(model)
+cat("query donors:", nrow(preds), "\n")
+print(preds)
+```
+
+## 4. Evaluate against the held-out truth
+
+The query donors' true `cond_group` lives in the metadata (never shown to the
+model). We join it back to score accuracy and ROC-AUC.
+
+```{r eval}
+obs <- m3_dataset_obs(data)
+truth <- unique(obs[, c("sample_id", "cond_group")])
+truth <- stats::setNames(as.character(truth$cond_group), as.character(truth$sample_id))
+preds$true_label <- truth[as.character(preds$donor)]
+pos <- "Severe"
+y_true  <- as.integer(preds$true_label == pos)
+y_score <- preds[[paste0("prob_", pos)]]
+acc <- mean(preds$predicted_label == preds$true_label)
+
+auc_of <- function(score, label) {              # Mann-Whitney U / ROC-AUC
+  r <- rank(score); n1 <- sum(label == 1); n0 <- sum(label == 0)
+  if (n1 == 0 || n0 == 0) return(NA_real_)
+  (sum(r[label == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+}
+auc <- auc_of(y_score, y_true)
+cat(sprintf("held-out accuracy = %.3f   ROC-AUC = %.3f\n", acc, auc))
+```
+
+## 5. Visualise — held-out ROC
+
+```{r roc, fig.width = 6, fig.height = 5}
+roc_points <- function(score, label) {
+  o <- order(score, decreasing = TRUE)
+  tp <- cumsum(label[o] == 1); fp <- cumsum(label[o] == 0)
+  data.frame(fpr = c(0, fp / max(fp, 1)), tpr = c(0, tp / max(tp, 1)))
+}
+rp <- roc_points(y_score, y_true)
+ggplot(rp, aes(fpr, tpr)) +
+  geom_abline(linetype = "dashed", colour = "grey") +
+  geom_line(linewidth = 1, colour = "#4c72b0") +
+  annotate("text", x = 0.65, y = 0.1, label = sprintf("AUC = %.3f", auc)) +
+  labs(x = "False positive rate", y = "True positive rate", title = "Held-out donor ROC") +
+  theme_classic()
+```
+
+## 6. Patient-level embedding
+
+`m3_donor_embedding()` returns the **patient-level (donor) embedding** — the
+corrected donor vector the model actually classifies (one row per donor). We
+UMAP it (same `umap-learn`, `random_state = 0`, as the Python tutorial) and
+colour by reference/query, true phenotype, and whether the held-out prediction
+was correct.
+
+```{r patient-umap, fig.width = 16, fig.height = 5}
+demb <- m3_donor_embedding(model)
+info <- m3_predict_donors(model, include_reference = TRUE)
+info <- info[match(demb$donor, info$donor), ]
+info$true_label <- truth[as.character(demb$donor)]
+info$set     <- ifelse(info$is_reference, "reference", "query")
+info$correct <- ifelse(info$is_reference, "reference",
+                       ifelse(info$predicted_label == info$true_label, "correct", "wrong"))
+
+X  <- as.matrix(demb[, grep("^m3_", colnames(demb))])
+xy <- m3_umap(X, method = "umap", n_neighbors = 15L, random_state = 0L,
+              device = model$device)
+pdf <- data.frame(UMAP1 = xy[, 1], UMAP2 = xy[, 2],
+                  set = factor(info$set), true_label = factor(info$true_label),
+                  correct = factor(info$correct))
+
+pl <- function(colour, title) {
+  ggplot(pdf, aes(UMAP1, UMAP2, colour = .data[[colour]])) +
+    geom_point(size = 3, alpha = 0.85) + theme_classic() +
+    theme(axis.text = element_blank(), axis.ticks = element_blank()) +
+    labs(title = title, colour = NULL)
+}
+print(pl("set",        "Patient embedding — set"))
+print(pl("true_label", "Patient embedding — true_label"))
+print(pl("correct",    "Patient embedding — correct"))
+```
+
+**Done.** Leak-safe leave-one-batch-out donor disease prediction with a held-out
+ROC and a patient-level embedding UMAP.
+
+```{r cleanup, include = FALSE}
+m3_shutdown()
+```

@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.DS_Store
+*.o
+*.so
+inst/python/**/__pycache__/
+*.pyc
+inst/tutorials/**/*.html
+inst/tutorials/**/tutorial_out*/
+*.tar.gz
+*.Rcheck/
+/..Rcheck/
