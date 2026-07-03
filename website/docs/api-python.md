@@ -231,11 +231,6 @@ available; otherwise CPU.
   (`30`), `patient_w` (`3.0`), `adv_max` (`1.0`), `adv_warmup` (`10`), `n_disc`
   (`1`), `hidden` (`64`), `min_cells` (`5`).
 
-!!! note "Leak-safe held-out prediction"
-    When `held_out` is set, the query batches' `target_condition` labels are
-    masked throughout Stage-1 and Stage-2, so [`predict_donors`](#m3predict_donors)
-    reports honest generalisation rather than memorised labels.
-
 ---
 
 ## Read-outs
