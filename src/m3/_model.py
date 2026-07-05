@@ -531,6 +531,32 @@ class M3:
             start += w
         return out
 
+    def _hvg_index(self, mod: str, w: int, full: list) -> list:
+        """Original-column indices of the ``w`` features the trained model uses for ``mod``.
+
+        When in-model HVG selection is active (``hvg={mod: n}`` at construction), the
+        engine keeps a *scattered* scanpy-selected subset of the original columns, not
+        the first ``w``. Reproduce that selection with the engine's own (deterministic)
+        ``process_highly_variable_genes`` so attribution feature names line up with the
+        columns actually attributed. Returns ``range(w)`` when no in-model HVG was applied
+        (full matrix -> the first ``w`` are all of them, so the prefix is already correct).
+        """
+        hvg_n = self.hvg.get(mod)
+        if not hvg_n or w == len(full):
+            return list(range(w))
+        from m3._engine.util import process_highly_variable_genes
+        mat = self.dataset.modalities[mod]                    # raw counts, all cells
+        dense = torch.as_tensor(np.asarray(mat.todense()), dtype=torch.float32)
+        dense = dense[dense.sum(dim=1) != 0]                  # engine drops all-zero cells first
+        _, hvg_mask = process_highly_variable_genes(dense, int(hvg_n))
+        idx = np.where(np.asarray(hvg_mask))[0].tolist()
+        if len(idx) != w:
+            raise RuntimeError(
+                f"attribution could not map HVG feature names for modality {mod!r}: "
+                f"reproduced {len(idx)} selected features but the model uses {w}. "
+                "Pre-select HVGs before building the Dataset to avoid in-model hvg=.")
+        return idx
+
     # ---------------------------------------------------------- attribution
     def attribute(self, *, reference_labels, target_class: int | None = None, n_steps: int = 50):
         """End-to-end integrated-gradients attribution.
@@ -596,7 +622,8 @@ class M3:
         modality_of: list[str] = []
         for mod, w in zip(present, splits):
             full = list(self.dataset.var[mod])
-            feat_names.extend(full[:w])  # engine takes the first `w` HVG-selected features
+            idx = self._hvg_index(mod, w, full)  # model columns -> original var positions
+            feat_names.extend(full[i] for i in idx)
             modality_of.extend([mod] * w)
         return Attribution(
             res, feat_names, target_label=vocab[target_class],
