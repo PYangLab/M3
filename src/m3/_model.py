@@ -331,6 +331,12 @@ class M3:
         donor_cat = pd.Categorical(meta[self.donor_key].astype(str))
         donor_codes = torch.tensor(donor_cat.codes.astype("int64").copy()).to(dev)
 
+        # NOTE (assumption): cond_codes below are reference-only, string-sorted condition
+        # codes. They align with the engine's cell-level condition classifier go[7][ci]
+        # only when target_condition is a string label whose reference categories share the
+        # engine's full-set ordering — true for the shipped setup (string disease labels,
+        # both classes present in the reference). For numeric-coded conditions or a
+        # query-exclusive category the code spaces can diverge for the auxiliary cond_loss.
         ref_meta = meta.iloc[:n_ref]
         ref_cond_cat = pd.Categorical(ref_meta[self.target_condition].astype(str))
         condition_vocab = [str(c) for c in ref_cond_cat.categories]
@@ -665,6 +671,20 @@ class M3:
         """
         if not self.capabilities["embedding"]:
             raise M3CapabilityError("augment requires train(); call train() first.")
+        if self.donor_key is None:
+            raise M3CapabilityError(
+                "augment requires donor_key at construction (it resamples donor templates).")
+        conditions, n_donors = list(conditions), list(n_donors)
+        if len(conditions) != len(n_donors):
+            raise ValueError(
+                f"conditions ({len(conditions)}) and n_donors ({len(n_donors)}) "
+                "must be the same length.")
+        _valid = set(self._all_metadata[self.target_condition].astype(str).unique())
+        _unknown = [c for c in map(str, conditions) if c not in _valid]
+        if _unknown:
+            raise ValueError(
+                f"conditions {_unknown} not found in {self.target_condition!r}; "
+                f"valid values: {sorted(_valid)}.")
         from m3._engine.simulation import (
             combine_simulated_donors,
             summarise_generated_results,
@@ -682,12 +702,16 @@ class M3:
         results = synthesize_donors_per_condition(
             self._generator, self._all_data, self._all_metadata, self._all_b,
             self._all_mask_poe, self.celltype_key, self.donor_key, self.target_condition,
-            list(conditions), list(n_donors),
+            conditions, n_donors,
             batch_col=batch_col, target_batch=target_batch,
             per_class=-1, tau=tau,
             device=str(self._device), seed=seed)
         summary = summarise_generated_results(results)
         X, meta = combine_simulated_donors(summary)
+        # engine emits fixed Liu-style obs column names; map them back to the model's keys
+        meta = meta.rename(columns={"cond_group": self.target_condition,
+                                    "mergedcelltype": self.celltype_key,
+                                    "donor": self.donor_key})
         arr = X.numpy() if hasattr(X, "numpy") else np.asarray(X)
         splits = list(self._generator.encoder.feature_splits)
         present = [m for m in _MODALITY_ORDER if m in self.dataset.modality_names]
