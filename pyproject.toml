@@ -24,6 +24,9 @@ dev = ["pytest", "ruff"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/m3"]
 
+[tool.hatch.build.targets.sdist]
+include = ["/src/m3", "/tests", "/README.md", "/LICENSE", "/pyproject.toml"]
+
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
