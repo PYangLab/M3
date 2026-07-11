@@ -5,7 +5,7 @@ import pandas as pd
 @torch.no_grad()
 def synthesize_per_class(generator, ref_data, ref_metadata, ref_b, ref_mask_poe, celltype_name, per_class=500, tau=0.8,
                          device="cuda", mask=None, seed=42):
-    g = torch.Generator(device=device).manual_seed(seed)
+    torch_generator = torch.Generator(device=device).manual_seed(seed)
     generator.to(device).eval()
     celltypes = ref_metadata[celltype_name].to_numpy()
     batches = ref_b                              # shape [N]
@@ -17,7 +17,7 @@ def synthesize_per_class(generator, ref_data, ref_metadata, ref_b, ref_mask_poe,
     std_all = (0.5 * logvar_all).exp()               # [N, zdim]
 
     if per_class == -1:
-        eps = torch.randn_like(std_all)     # [N, zdim]
+        eps = torch.randn(std_all.shape, device=std_all.device, generator=torch_generator)  # [N, zdim]
         z_all = mu_all + tau * std_all * eps
         x_gen_all = generator.decoder(z_all)             # [N, F]
         return x_gen_all.detach().cpu()
@@ -30,10 +30,10 @@ def synthesize_per_class(generator, ref_data, ref_metadata, ref_b, ref_mask_poe,
                 continue
             idx = torch.as_tensor(idx_np, device=device)
     
-            sel = idx[torch.randint(0, idx.numel(), (per_class,), generator=g, device=device)]
+            sel = idx[torch.randint(0, idx.numel(), (per_class,), generator=torch_generator, device=device)]
             mu  = mu_all[sel]            # [per_class, zdim]
             std = std_all[sel]           # [per_class, zdim]
-            eps = torch.randn_like(std)
+            eps = torch.randn(std.shape, device=std.device, generator=torch_generator)
             z   = mu + tau * std * eps
             x_gen = generator.decoder(z) # [per_class, F]
             out[str(cls)] = x_gen.detach().cpu()
@@ -63,7 +63,8 @@ def synthesize_donors_per_condition(
     seed=42,
 ):
 
-    g = torch.Generator(device=device).manual_seed(seed)
+    torch_generator = torch.Generator(device=device).manual_seed(seed)
+    numpy_generator = np.random.default_rng(seed)   # donor-template selection (was global np.random)
     generator.to(device).eval()
 
     # Prepare tensors
@@ -98,7 +99,7 @@ def synthesize_donors_per_condition(
         results[cond] = {}
 
         for donor_idx in range(n_donors):
-            sample_template = np.random.choice(cond_cells[sample_col].unique())
+            sample_template = numpy_generator.choice(cond_cells[sample_col].unique())
             donor_cells = cond_cells[cond_cells[sample_col] == sample_template]
             celltypes = donor_cells[celltype_col].unique()
 
@@ -113,12 +114,12 @@ def synthesize_donors_per_condition(
                 if per_class == -1:
                     sel = idx
                 else:
-                    sel = idx[torch.randint(0, idx.numel(), (per_class,), generator=g, device=device)]
+                    sel = idx[torch.randint(0, idx.numel(), (per_class,), generator=torch_generator, device=device)]
 
                 mu = mu_all[sel]
                 std = std_all[sel]
 
-                eps = torch.randn(std.shape, device=std.device, generator=g)
+                eps = torch.randn(std.shape, device=std.device, generator=torch_generator)
                 z = mu + tau * std * eps
                 x_gen = generator.decoder(z)
 
