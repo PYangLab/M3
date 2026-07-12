@@ -51,6 +51,11 @@ class M3:
             condition_keys = [condition_keys]
         if not condition_keys:
             raise ValueError("condition_keys is required (m3 is condition-aware).")
+        if len(condition_keys) > 2:
+            raise ValueError(
+                f"m3 supports at most 2 condition keys; got {len(condition_keys)} "
+                f"({list(condition_keys)}). The engine's readout only returns results for "
+                "1-2 conditions (3+ fails downstream after the whole training run).")
         for col in condition_keys:
             if col not in dataset.obs.columns:
                 raise ValueError(f"condition key '{col}' not in dataset.obs.")
@@ -175,7 +180,7 @@ class M3:
         ``None`` (default) weights every present modality equally (1.0).
 
         ``seed`` (default 0) is applied right before the Stage-1 integration VAE,
-        which the upstream engine otherwise leaves unseeded — without it a run
+        which the upstream engine otherwise leaves unseeded -- without it a run
         drifts run-to-run and is not guaranteed to match the R interface. Seeding
         here (the same way ``m3_train(seed=)`` does) makes a run reproducible and
         R==Python identical. Pass ``seed=None`` for the engine's unseeded behaviour.
@@ -233,7 +238,7 @@ class M3:
                  if self.held_out_samples else {})
 
         # The upstream engine leaves the Stage-1 integration VAE unseeded (run-to-run
-        # drift); seed here — mirroring the R interface — so the run is reproducible
+        # drift); seed here -- mirroring the R interface -- so the run is reproducible
         # and R==Python identical. seed=None keeps the engine's unseeded behaviour.
         if seed is not None:
             from m3._engine.util import setup_seed
@@ -334,7 +339,7 @@ class M3:
         # NOTE (assumption): cond_codes below are reference-only, string-sorted condition
         # codes. They align with the engine's cell-level condition classifier go[7][ci]
         # only when target_condition is a string label whose reference categories share the
-        # engine's full-set ordering — true for the shipped setup (string disease labels,
+        # engine's full-set ordering -- true for the shipped setup (string disease labels,
         # both classes present in the reference). For numeric-coded conditions or a
         # query-exclusive category the code spaces can diverge for the auxiliary cond_loss.
         ref_meta = meta.iloc[:n_ref]
@@ -468,10 +473,17 @@ class M3:
         df = pd.DataFrame(rows)
         if not include_reference:
             df = df[~df["is_reference"]].reset_index(drop=True)
+            if df.empty:
+                warnings.warn(
+                    "predict_donors() has no query donors to report: the model was trained "
+                    "without a held-out set (no held_out / held_out_samples), so every donor "
+                    "is a reference donor. Pass include_reference=True to see reference-donor "
+                    "predictions, or construct M3 with held_out=/held_out_samples= to define a "
+                    "query set.", stacklevel=2)
         return df
 
     def donor_embedding(self) -> pd.DataFrame:
-        """Patient/donor-level embedding — the corrector-corrected donor vector used for
+        """Patient/donor-level embedding -- the corrector-corrected donor vector used for
         prediction. Returns a DataFrame indexed by donor, with an `is_reference` column
         followed by the embedding dimensions (`m3_0`, `m3_1`, ...). Join with
         `predict_donors(include_reference=True)` for predicted labels.
@@ -664,7 +676,7 @@ class M3:
 
         batch: optional batch label (looked up against the column passed as
             ``batch_key`` at construction time). When set, template samples for
-            generation are restricted to that batch — useful for reproducing
+            generation are restricted to that batch -- useful for reproducing
             batch-stratified figures.
 
         Returns {'expression': {modality: array}, 'obs': DataFrame}.
@@ -735,11 +747,11 @@ class Attribution:
 
     Three views of gene importance are available:
 
-    * ``self.genes`` — raw engine output: ``mean(|IG|)`` across ALL cells. Quick
+    * ``self.genes`` -- raw engine output: ``mean(|IG|)`` across ALL cells. Quick
       and unfiltered; use this when you don't have a target/reference condition.
-    * ``self.gene_celltype_matrix`` — signed per-(cell-type, gene) attribution,
+    * ``self.gene_celltype_matrix`` -- signed per-(cell-type, gene) attribution,
       the substrate for per-celltype-balanced ranking.
-    * ``self.top_genes(...)`` — the publication recipe:
+    * ``self.top_genes(...)`` -- the publication recipe:
       drop cell types where either condition has < ``min_cells_per_condition``
       cells, score each gene as ``mean(|gene_celltype_matrix|)`` across kept
       cell types, exclude housekeeping/ribosomal genes by name, optionally mask
@@ -790,7 +802,7 @@ class Attribution:
             (default 200, matches the Liu publication recipe). Set to 0 to
             return the raw :attr:`celltypes` table unfiltered.
 
-        Note: this does NOT exclude QC labels like 'Unk' / 'dblt' / 'dim' —
+        Note: this does NOT exclude QC labels like 'Unk' / 'dblt' / 'dim' --
         those are dataset-specific QC categories that should be cleaned out at
         the data-processing stage before calling ``m3.M3(...)``.
         """
@@ -800,7 +812,7 @@ class Attribution:
            self._target_condition is None or self._reference_labels is None:
             raise ValueError(
                 "top_celltypes with min_cells_per_condition>0 needs cell_metadata, "
-                "celltype_key, target_condition, and reference_labels — "
+                "celltype_key, target_condition, and reference_labels -- "
                 "obtain the Attribution via M3.attribute(...).")
         meta = self._cell_metadata
         ref_set = set(map(str, self._reference_labels))
@@ -842,7 +854,7 @@ class Attribution:
                self._target_condition is None or self._reference_labels is None:
                 raise ValueError(
                     "top_genes with min_cells_per_condition>0 needs cell_metadata, "
-                    "celltype_key, target_condition, and reference_labels — "
+                    "celltype_key, target_condition, and reference_labels -- "
                     "obtain the Attribution via M3.attribute(...).")
             meta = self._cell_metadata
             ref_set = set(map(str, self._reference_labels))

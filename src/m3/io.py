@@ -16,7 +16,7 @@ from m3._dataset import Dataset
 def _validate_raw(counts: dict, obs: pd.DataFrame) -> None:
     # Raw-count sanity check only. NaN in obs is checked later, at M3 construction,
     # and only on the columns the user actually selects as roles (condition / batch /
-    # donor / celltype / batch) — checking every obs column here just floods warnings.
+    # donor / celltype / batch) -- checking every obs column here just floods warnings.
     for name, mat in counts.items():
         arr = sp.csr_matrix(mat, dtype=np.float32)
         if arr.nnz:
@@ -58,6 +58,12 @@ def read_matrix(
         names = pd.Index(list(var[name]))
         if len(names) != m.shape[1]:
             raise ValueError(f"var['{name}'] has {len(names)} names for {m.shape[1]} columns.")
+        if names.has_duplicates:
+            dups = names[names.duplicated()].unique().tolist()
+            raise ValueError(
+                f"modality '{name}': feature names must be unique, but {len(dups)} are "
+                f"duplicated (e.g. {dups[:5]}). De-duplicate first -- e.g. AnnData's "
+                "adata.var_names_make_unique() -- then read.")
         modalities[name] = m
         var_out[name] = names
         present[name] = np.ones(n, dtype=bool)

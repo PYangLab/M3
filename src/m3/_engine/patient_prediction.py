@@ -317,6 +317,12 @@ def predict_with_reference_query(
     query_donor_names = np.array([donor_vocab[int(i.item())] for i in query_donors], dtype=object)
     ref_donor_names = np.array([donor_vocab[int(i.item())] for i in ref_donors], dtype=object)
 
+    if corrector is None:
+        raise ValueError(
+            "patient prediction requires the batch corrector, but do_batch_correction=False "
+            "was passed. The donor status classifier (status_head) lives on the corrector; "
+            "set do_batch_correction=True to run prediction.")
+
     with torch.no_grad():
         z_query = corrector.correct(query_features.to(device_bc))
         predictions = corrector.status_head(z_query)
