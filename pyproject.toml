@@ -9,6 +9,20 @@ description = "Multimodal, multi-batch, condition-aware single-cell model with d
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "CSB Yang Laboratory" }]
+keywords = [
+    "single-cell", "multiomics", "CITE-seq", "batch-integration",
+    "patient-prediction", "variational-autoencoder", "deep-learning",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+# torch is installed separately (its build is CUDA/CPU-specific); see the README.
 dependencies = [
     "numpy",
     "scipy",
@@ -16,10 +30,18 @@ dependencies = [
     "anndata",
     "h5py",
     "scikit-learn",
+    "scanpy",
+    "tqdm",
+    "captum",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
+
+[project.urls]
+Homepage = "https://github.com/PYangLab/M3"
+Documentation = "https://pyanglab.github.io/M3/"
+Repository = "https://github.com/PYangLab/M3"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/m3"]
