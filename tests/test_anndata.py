@@ -29,10 +29,28 @@ def test_from_anndata_split_by_feature_types():
 
 
 def test_read_h5ad_roundtrip(tmp_path):
-    X = np.array([[1, 0], [0, 2]], dtype=np.float32)
-    a = ad.AnnData(X=X, obs=pd.DataFrame(index=["c1", "c2"]), var=pd.DataFrame(index=["g1", "g2"]))
+    # Each cell is tagged (row i of X starts at 3*i; obs carries per-cell labels)
+    # so that dropping obs, reordering it, or desyncing it from the counts is caught.
+    n = 4
+    X = np.arange(n * 3, dtype=np.float32).reshape(n, 3)
+    obs = pd.DataFrame(
+        {"disease": ["hc", "covid", "hc", "covid"],
+         "donor": ["d0", "d1", "d2", "d3"],
+         "n_genes": [10, 20, 30, 40]},
+        index=[f"cell{i}" for i in range(n)],
+    )
+    a = ad.AnnData(X=X, obs=obs, var=pd.DataFrame(index=["g1", "g2", "g3"]))
     p = tmp_path / "c.h5ad"
     a.write_h5ad(p)
+
     d = m3.read_h5ad(str(p), batch="A")
-    assert d.n_cells == 2
-    assert list(d.var["rna"]) == ["g1", "g2"]
+
+    assert d.n_cells == n
+    assert list(d.var["rna"]) == ["g1", "g2", "g3"]
+    # every user obs column survives the file round-trip, values and row order intact
+    assert list(d.obs["disease"]) == ["hc", "covid", "hc", "covid"]
+    assert list(d.obs["donor"]) == ["d0", "d1", "d2", "d3"]
+    assert d.obs["n_genes"].tolist() == [10, 20, 30, 40]
+    # obs rows still align with their count rows (row i of X starts at 3*i)
+    counts = d.modalities["rna"].toarray()
+    assert np.allclose(counts[:, 0], np.arange(n, dtype=np.float32) * 3)
