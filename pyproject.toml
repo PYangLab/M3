@@ -33,5 +33,4 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-# _engine holds the vendored PyTorch engine; not linted (research code).
 extend-exclude = ["src/m3/_engine"]

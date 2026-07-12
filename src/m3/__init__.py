@@ -1,4 +1,4 @@
-"""m3 — multimodal, multi-batch, condition-aware single-cell model."""
+"""m3 -- multimodal, multi-batch, condition-aware single-cell model."""
 
 from m3.io import read_matrix, from_anndata, read_h5ad, read_h5
 from m3._concat import concat
