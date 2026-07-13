@@ -2,6 +2,8 @@
 
 m3 explains its donor-level disease prediction with **end-to-end integrated gradients**, attributing the prediction back to **genes/proteins**, **cell types**, and **donors**. We train on the full demo reference, then call `m3_attribute(reference_labels = "HC")` (HC = the healthy integrated-gradients baseline) and visualise the rankings.
 
+## 1. Load the demo dataset
+
 ``` r
 library(m3)
 set.seed(0)

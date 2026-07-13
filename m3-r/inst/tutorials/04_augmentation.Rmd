@@ -18,6 +18,8 @@ cohorts. We train the integration model, then use `m3_augment()` (new donors per
 condition) and `m3_generate()` (posterior-resampled cells), and check the
 synthetic data matches the real distribution.
 
+## 1. Read the batches and merge
+
 ```{r libs}
 library(m3)
 set.seed(0)

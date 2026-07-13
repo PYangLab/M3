@@ -2,6 +2,8 @@
 
 m3’s headline task: predict **donor/patient-level disease status** from multimodal single-cell data, in a **leak-safe leave-one-batch-out** setting. We hold out one batch (`B3`); its donors’ disease labels are masked during training and predicted at the end. One `m3_model` trains the integration VAE **and** the donor-level adversarial predictor; `m3_predict_donors()` returns per-donor class probabilities.
 
+## 1. Load the demo dataset
+
 ``` r
 library(m3)
 set.seed(0)

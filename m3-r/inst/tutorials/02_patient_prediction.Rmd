@@ -19,6 +19,8 @@ predicted at the end. One `m3_model` trains the integration VAE **and** the
 donor-level adversarial predictor; `m3_predict_donors()` returns per-donor class
 probabilities.
 
+## 1. Read the batches and merge
+
 ```{r libs}
 library(m3)
 set.seed(0)

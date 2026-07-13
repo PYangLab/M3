@@ -18,6 +18,8 @@ types**, and **donors**. We train on the full demo reference, then call
 `m3_attribute(reference_labels = "HC")` (HC = the healthy integrated-gradients
 baseline) and visualise the rankings.
 
+## 1. Load the demo dataset
+
 ```{r libs}
 library(m3)
 set.seed(0)

@@ -18,6 +18,8 @@ types**, and **donors**. We train on the full Liu reference, then call
 `m3_attribute(reference_labels = "HC")` (HC = the healthy integrated-gradients
 baseline) and visualise the rankings.
 
+## 1. Read the batches and merge
+
 ```{r libs}
 library(m3)
 set.seed(0)

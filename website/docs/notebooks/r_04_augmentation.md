@@ -2,6 +2,8 @@
 
 m3’s decoder is generative: by sampling the posterior of real cells we synthesise new **cells** and new **donors per condition**, useful for augmenting small cohorts. We train the integration model, then use `m3_augment()` (new donors per condition) and `m3_generate()` (posterior-resampled cells), and check the synthetic data matches the real distribution.
 
+## 1. Load the demo dataset
+
 ``` r
 library(m3)
 set.seed(0)
