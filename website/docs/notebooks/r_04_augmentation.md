@@ -123,7 +123,11 @@ embed_2d <- function(pb, dev) {
   m3_umap(Z, method = "umap", n_neighbors = min(10L, nrow(Z) - 1L),
           min_dist = 0.3, metric = "euclidean", random_state = 0L, device = dev)
 }
+```
 
+**Embed** each batch and modality: augment on that batch, then pseudobulk and UMAP the real + synthetic samples together into one layout per panel.
+
+``` r
 batches <- sort(unique(as.character(obs$batch)))
 N_DONORS <- 5L
 panels <- list()
@@ -154,6 +158,11 @@ for (ci in seq_along(batches)) {
   }
 }
 plot_df <- do.call(rbind, panels)
+```
+
+**Draw** the panels with ggplot: real donors as open circles, m3-generated as crosses, faceted by batch and modality.
+
+``` r
 cols <- c(HC = "#E64B35", Severe = "#4DBBD5")
 ggplot() +
   geom_point(data = subset(plot_df, kind == "real"),

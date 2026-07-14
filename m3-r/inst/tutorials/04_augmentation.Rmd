@@ -89,7 +89,7 @@ pearson <- stats::cor(m_real, m_syn)
 cat(sprintf("per-gene mean expression Pearson r = %.3f\n", pearson))
 ```
 
-```{r samplelevel, fig.width = 18, fig.height = 9}
+```{r samplelevel-helpers}
 # Compare samples in the model's reconstruction (decoder) space, the same space the
 # generated cells live in. Each sample is summarised per shared cell type (so
 # composition differences don't confound), then features are standardised.
@@ -115,7 +115,12 @@ embed_2d <- function(pb, dev) {
   m3_umap(Z, method = "umap", n_neighbors = min(10L, nrow(Z) - 1L),
           min_dist = 0.3, metric = "euclidean", random_state = 0L, device = dev)
 }
+```
 
+**Embed** each batch and modality: augment on that batch, then pseudobulk and
+UMAP the real + synthetic samples together into one layout per panel.
+
+```{r samplelevel-embed}
 batches <- sort(unique(as.character(obs$batch)))
 N_DONORS <- 5L
 panels <- list()
@@ -146,6 +151,12 @@ for (ci in seq_along(batches)) {
   }
 }
 plot_df <- do.call(rbind, panels)
+```
+
+**Draw** the panels with ggplot: real donors as open circles, m3-generated as
+crosses, faceted by batch and modality.
+
+```{r samplelevel-draw, fig.width = 18, fig.height = 9}
 cols <- c(HC = "#E64B35", Severe = "#4DBBD5")
 ggplot() +
   geom_point(data = subset(plot_df, kind == "real"),
