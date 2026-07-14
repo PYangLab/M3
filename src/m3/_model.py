@@ -466,7 +466,7 @@ class M3:
         names = [str(dp["donor_cat"].categories[int(d)]) for d in uds.tolist()]
         is_query = np.array([not dp["donor_is_ref"][int(d)] for d in uds.tolist()])
         vocab = dp["condition_vocab"]
-        rows = {"donor": names, "is_reference": ~is_query,
+        rows = {self.donor_key: names, "is_reference": ~is_query,
                 "predicted_label": [vocab[i] for i in pred]}
         for i, v in enumerate(vocab):
             rows[f"prob_{v}"] = prob[:, i]
@@ -497,7 +497,7 @@ class M3:
         dp = self._dp
         names = [str(dp["donor_cat"].categories[int(d)]) for d in uds.tolist()]
         is_ref = [bool(dp["donor_is_ref"][int(d)]) for d in uds.tolist()]
-        df = pd.DataFrame(emb, index=pd.Index(names, name="donor"),
+        df = pd.DataFrame(emb, index=pd.Index(names, name=self.donor_key),
                           columns=[f"m3_{i}" for i in range(emb.shape[1])])
         df.insert(0, "is_reference", is_ref)
         return df
@@ -648,6 +648,7 @@ class M3:
             modality_of=modality_of,
             cell_metadata=self._all_metadata,
             celltype_key=self.celltype_key,
+            donor_key=self.donor_key,
             target_condition=self.target_condition,
             reference_labels=list(reference_labels))
 
@@ -762,6 +763,7 @@ class Attribution:
                  modality_of: list | None = None,
                  cell_metadata: pd.DataFrame | None = None,
                  celltype_key: str | None = None,
+                 donor_key: str | None = None,
                  target_condition: str | None = None,
                  reference_labels: list | None = None):
         self.target_label = target_label
@@ -769,6 +771,7 @@ class Attribution:
         self._modality_of = list(modality_of) if modality_of is not None else None
         self._cell_metadata = cell_metadata
         self._celltype_key = celltype_key
+        self._donor_key = donor_key
         self._target_condition = target_condition
         self._reference_labels = list(reference_labels) if reference_labels else None
 
@@ -784,7 +787,7 @@ class Attribution:
         if "donor_attribution" in res:
             da = _np(res["donor_attribution"]).ravel()
             names = list(res.get("donor_names", range(len(da))))
-            self.donors = (pd.DataFrame({"donor": names[: len(da)], "attribution": da})
+            self.donors = (pd.DataFrame({(self._donor_key or "donor"): names[: len(da)], "attribution": da})
                            .sort_values("attribution", ascending=False).reset_index(drop=True))
         else:
             self.donors = None

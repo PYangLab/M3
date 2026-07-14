@@ -20,10 +20,10 @@ _FT_TO_MODALITY = {
 
 
 def liu_demo() -> Dataset:
-    """Load the Liu et al. CITE-seq demo subsample (≈30k cells, 3 batches).
+    """Load the Liu et al. CITE-seq demo subsample (~30k cells, 3 batches).
 
     A ~30k-cell (30,534) stratified subsample of the full dataset (~135k cells)
-    used in the publication, balanced by batch × condition × cell type so every
+    used in the publication, balanced by batch x condition x cell type so every
     annotated cell type survives. QC labels (Unk / dblt / dim) are pre-filtered.
 
     Returns
@@ -31,7 +31,7 @@ def liu_demo() -> Dataset:
     :class:`m3.Dataset`
         Multi-batch, multimodal (RNA 1000 HVG + ADT 192) with obs columns
         ``batch`` (``B1``/``B2``/``B3``), ``sample_id``, ``Donor``,
-        ``cond_group``, ``Age_interval``, ``mergedcelltype`` — ready for
+        ``cond_group``, ``Age_interval``, ``mergedcelltype`` -- ready for
         ``m3.M3(...)``.
 
     Example
@@ -76,7 +76,7 @@ def liu_demo() -> Dataset:
         raise ValueError("liu_demo.h5ad has no recognised modality in var['feature_types'].")
 
     obs = ad.obs.reset_index(drop=True).copy()
-    # The shipped demo carries two columns for the SAME 3-way split — a stamped
+    # The shipped demo carries two columns for the SAME 3-way split -- a stamped
     # 'cohort' (batch1/2/3) and the real 'Batch' (B1/B2/B3). m3 now uses a single
     # 'batch' key, so collapse to one 'batch' column with the real labels.
     if "Batch" in obs.columns:

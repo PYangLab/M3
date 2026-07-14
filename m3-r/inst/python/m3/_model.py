@@ -51,6 +51,11 @@ class M3:
             condition_keys = [condition_keys]
         if not condition_keys:
             raise ValueError("condition_keys is required (m3 is condition-aware).")
+        if len(condition_keys) > 2:
+            raise ValueError(
+                f"m3 supports at most 2 condition keys; got {len(condition_keys)} "
+                f"({list(condition_keys)}). The engine's readout only returns results for "
+                "1-2 conditions (3+ fails downstream after the whole training run).")
         for col in condition_keys:
             if col not in dataset.obs.columns:
                 raise ValueError(f"condition key '{col}' not in dataset.obs.")
@@ -175,7 +180,7 @@ class M3:
         ``None`` (default) weights every present modality equally (1.0).
 
         ``seed`` (default 0) is applied right before the Stage-1 integration VAE,
-        which the upstream engine otherwise leaves unseeded — without it a run
+        which the upstream engine otherwise leaves unseeded -- without it a run
         drifts run-to-run and is not guaranteed to match the R interface. Seeding
         here (the same way ``m3_train(seed=)`` does) makes a run reproducible and
         R==Python identical. Pass ``seed=None`` for the engine's unseeded behaviour.
@@ -233,7 +238,7 @@ class M3:
                  if self.held_out_samples else {})
 
         # The upstream engine leaves the Stage-1 integration VAE unseeded (run-to-run
-        # drift); seed here — mirroring the R interface — so the run is reproducible
+        # drift); seed here -- mirroring the R interface -- so the run is reproducible
         # and R==Python identical. seed=None keeps the engine's unseeded behaviour.
         if seed is not None:
             from m3._engine.util import setup_seed
@@ -331,6 +336,12 @@ class M3:
         donor_cat = pd.Categorical(meta[self.donor_key].astype(str))
         donor_codes = torch.tensor(donor_cat.codes.astype("int64").copy()).to(dev)
 
+        # NOTE (assumption): cond_codes below are reference-only, string-sorted condition
+        # codes. They align with the engine's cell-level condition classifier go[7][ci]
+        # only when target_condition is a string label whose reference categories share the
+        # engine's full-set ordering -- true for the shipped setup (string disease labels,
+        # both classes present in the reference). For numeric-coded conditions or a
+        # query-exclusive category the code spaces can diverge for the auxiliary cond_loss.
         ref_meta = meta.iloc[:n_ref]
         ref_cond_cat = pd.Categorical(ref_meta[self.target_condition].astype(str))
         condition_vocab = [str(c) for c in ref_cond_cat.categories]
@@ -455,17 +466,24 @@ class M3:
         names = [str(dp["donor_cat"].categories[int(d)]) for d in uds.tolist()]
         is_query = np.array([not dp["donor_is_ref"][int(d)] for d in uds.tolist()])
         vocab = dp["condition_vocab"]
-        rows = {"donor": names, "is_reference": ~is_query,
+        rows = {self.donor_key: names, "is_reference": ~is_query,
                 "predicted_label": [vocab[i] for i in pred]}
         for i, v in enumerate(vocab):
             rows[f"prob_{v}"] = prob[:, i]
         df = pd.DataFrame(rows)
         if not include_reference:
             df = df[~df["is_reference"]].reset_index(drop=True)
+            if df.empty:
+                warnings.warn(
+                    "predict_donors() has no query donors to report: the model was trained "
+                    "without a held-out set (no held_out / held_out_samples), so every donor "
+                    "is a reference donor. Pass include_reference=True to see reference-donor "
+                    "predictions, or construct M3 with held_out=/held_out_samples= to define a "
+                    "query set.", stacklevel=2)
         return df
 
     def donor_embedding(self) -> pd.DataFrame:
-        """Patient/donor-level embedding — the corrector-corrected donor vector used for
+        """Patient/donor-level embedding -- the corrector-corrected donor vector used for
         prediction. Returns a DataFrame indexed by donor, with an `is_reference` column
         followed by the embedding dimensions (`m3_0`, `m3_1`, ...). Join with
         `predict_donors(include_reference=True)` for predicted labels.
@@ -479,7 +497,7 @@ class M3:
         dp = self._dp
         names = [str(dp["donor_cat"].categories[int(d)]) for d in uds.tolist()]
         is_ref = [bool(dp["donor_is_ref"][int(d)]) for d in uds.tolist()]
-        df = pd.DataFrame(emb, index=pd.Index(names, name="donor"),
+        df = pd.DataFrame(emb, index=pd.Index(names, name=self.donor_key),
                           columns=[f"m3_{i}" for i in range(emb.shape[1])])
         df.insert(0, "is_reference", is_ref)
         return df
@@ -530,6 +548,32 @@ class M3:
             out[m] = recon[:, start: start + w]
             start += w
         return out
+
+    def _hvg_index(self, mod: str, w: int, full: list) -> list:
+        """Original-column indices of the ``w`` features the trained model uses for ``mod``.
+
+        When in-model HVG selection is active (``hvg={mod: n}`` at construction), the
+        engine keeps a *scattered* scanpy-selected subset of the original columns, not
+        the first ``w``. Reproduce that selection with the engine's own (deterministic)
+        ``process_highly_variable_genes`` so attribution feature names line up with the
+        columns actually attributed. Returns ``range(w)`` when no in-model HVG was applied
+        (full matrix -> the first ``w`` are all of them, so the prefix is already correct).
+        """
+        hvg_n = self.hvg.get(mod)
+        if not hvg_n or w == len(full):
+            return list(range(w))
+        from m3._engine.util import process_highly_variable_genes
+        mat = self.dataset.modalities[mod]                    # raw counts, all cells
+        dense = torch.as_tensor(np.asarray(mat.todense()), dtype=torch.float32)
+        dense = dense[dense.sum(dim=1) != 0]                  # engine drops all-zero cells first
+        _, hvg_mask = process_highly_variable_genes(dense, int(hvg_n))
+        idx = np.where(np.asarray(hvg_mask))[0].tolist()
+        if len(idx) != w:
+            raise RuntimeError(
+                f"attribution could not map HVG feature names for modality {mod!r}: "
+                f"reproduced {len(idx)} selected features but the model uses {w}. "
+                "Pre-select HVGs before building the Dataset to avoid in-model hvg=.")
+        return idx
 
     # ---------------------------------------------------------- attribution
     def attribute(self, *, reference_labels, target_class: int | None = None, n_steps: int = 50):
@@ -596,13 +640,15 @@ class M3:
         modality_of: list[str] = []
         for mod, w in zip(present, splits):
             full = list(self.dataset.var[mod])
-            feat_names.extend(full[:w])  # engine takes the first `w` HVG-selected features
+            idx = self._hvg_index(mod, w, full)  # model columns -> original var positions
+            feat_names.extend(full[i] for i in idx)
             modality_of.extend([mod] * w)
         return Attribution(
             res, feat_names, target_label=vocab[target_class],
             modality_of=modality_of,
             cell_metadata=self._all_metadata,
             celltype_key=self.celltype_key,
+            donor_key=self.donor_key,
             target_condition=self.target_condition,
             reference_labels=list(reference_labels))
 
@@ -631,13 +677,27 @@ class M3:
 
         batch: optional batch label (looked up against the column passed as
             ``batch_key`` at construction time). When set, template samples for
-            generation are restricted to that batch — useful for reproducing
+            generation are restricted to that batch -- useful for reproducing
             batch-stratified figures.
 
         Returns {'expression': {modality: array}, 'obs': DataFrame}.
         """
         if not self.capabilities["embedding"]:
             raise M3CapabilityError("augment requires train(); call train() first.")
+        if self.donor_key is None:
+            raise M3CapabilityError(
+                "augment requires donor_key at construction (it resamples donor templates).")
+        conditions, n_donors = list(conditions), list(n_donors)
+        if len(conditions) != len(n_donors):
+            raise ValueError(
+                f"conditions ({len(conditions)}) and n_donors ({len(n_donors)}) "
+                "must be the same length.")
+        _valid = set(self._all_metadata[self.target_condition].astype(str).unique())
+        _unknown = [c for c in map(str, conditions) if c not in _valid]
+        if _unknown:
+            raise ValueError(
+                f"conditions {_unknown} not found in {self.target_condition!r}; "
+                f"valid values: {sorted(_valid)}.")
         from m3._engine.simulation import (
             combine_simulated_donors,
             summarise_generated_results,
@@ -655,12 +715,16 @@ class M3:
         results = synthesize_donors_per_condition(
             self._generator, self._all_data, self._all_metadata, self._all_b,
             self._all_mask_poe, self.celltype_key, self.donor_key, self.target_condition,
-            list(conditions), list(n_donors),
+            conditions, n_donors,
             batch_col=batch_col, target_batch=target_batch,
             per_class=-1, tau=tau,
             device=str(self._device), seed=seed)
         summary = summarise_generated_results(results)
         X, meta = combine_simulated_donors(summary)
+        # engine emits fixed Liu-style obs column names; map them back to the model's keys
+        meta = meta.rename(columns={"cond_group": self.target_condition,
+                                    "mergedcelltype": self.celltype_key,
+                                    "donor": self.donor_key})
         arr = X.numpy() if hasattr(X, "numpy") else np.asarray(X)
         splits = list(self._generator.encoder.feature_splits)
         present = [m for m in _MODALITY_ORDER if m in self.dataset.modality_names]
@@ -684,11 +748,11 @@ class Attribution:
 
     Three views of gene importance are available:
 
-    * ``self.genes`` — raw engine output: ``mean(|IG|)`` across ALL cells. Quick
+    * ``self.genes`` -- raw engine output: ``mean(|IG|)`` across ALL cells. Quick
       and unfiltered; use this when you don't have a target/reference condition.
-    * ``self.gene_celltype_matrix`` — signed per-(cell-type, gene) attribution,
+    * ``self.gene_celltype_matrix`` -- signed per-(cell-type, gene) attribution,
       the substrate for per-celltype-balanced ranking.
-    * ``self.top_genes(...)`` — the publication recipe:
+    * ``self.top_genes(...)`` -- the publication recipe:
       drop cell types where either condition has < ``min_cells_per_condition``
       cells, score each gene as ``mean(|gene_celltype_matrix|)`` across kept
       cell types, exclude housekeeping/ribosomal genes by name, optionally mask
@@ -699,6 +763,7 @@ class Attribution:
                  modality_of: list | None = None,
                  cell_metadata: pd.DataFrame | None = None,
                  celltype_key: str | None = None,
+                 donor_key: str | None = None,
                  target_condition: str | None = None,
                  reference_labels: list | None = None):
         self.target_label = target_label
@@ -706,6 +771,7 @@ class Attribution:
         self._modality_of = list(modality_of) if modality_of is not None else None
         self._cell_metadata = cell_metadata
         self._celltype_key = celltype_key
+        self._donor_key = donor_key
         self._target_condition = target_condition
         self._reference_labels = list(reference_labels) if reference_labels else None
 
@@ -721,7 +787,7 @@ class Attribution:
         if "donor_attribution" in res:
             da = _np(res["donor_attribution"]).ravel()
             names = list(res.get("donor_names", range(len(da))))
-            self.donors = (pd.DataFrame({"donor": names[: len(da)], "attribution": da})
+            self.donors = (pd.DataFrame({(self._donor_key or "donor"): names[: len(da)], "attribution": da})
                            .sort_values("attribution", ascending=False).reset_index(drop=True))
         else:
             self.donors = None
@@ -739,7 +805,7 @@ class Attribution:
             (default 200, matches the Liu publication recipe). Set to 0 to
             return the raw :attr:`celltypes` table unfiltered.
 
-        Note: this does NOT exclude QC labels like 'Unk' / 'dblt' / 'dim' —
+        Note: this does NOT exclude QC labels like 'Unk' / 'dblt' / 'dim' --
         those are dataset-specific QC categories that should be cleaned out at
         the data-processing stage before calling ``m3.M3(...)``.
         """
@@ -749,7 +815,7 @@ class Attribution:
            self._target_condition is None or self._reference_labels is None:
             raise ValueError(
                 "top_celltypes with min_cells_per_condition>0 needs cell_metadata, "
-                "celltype_key, target_condition, and reference_labels — "
+                "celltype_key, target_condition, and reference_labels -- "
                 "obtain the Attribution via M3.attribute(...).")
         meta = self._cell_metadata
         ref_set = set(map(str, self._reference_labels))
@@ -791,7 +857,7 @@ class Attribution:
                self._target_condition is None or self._reference_labels is None:
                 raise ValueError(
                     "top_genes with min_cells_per_condition>0 needs cell_metadata, "
-                    "celltype_key, target_condition, and reference_labels — "
+                    "celltype_key, target_condition, and reference_labels -- "
                     "obtain the Attribution via M3.attribute(...).")
             meta = self._cell_metadata
             ref_set = set(map(str, self._reference_labels))

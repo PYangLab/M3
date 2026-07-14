@@ -1,6 +1,6 @@
 """Bridge: marshal a :class:`m3.Dataset` to the engine's file-based inputs.
 
-The vendored engine (``m3._engine.run_M3``) consumes per-modality lists of
+The engine (``m3._engine.run_M3``) consumes per-modality lists of
 paper-format HDF5 files (one element per batch, ``None`` where a batch lacks a
 modality) plus a per-batch metadata CSV list. This module writes those temp
 files from an in-memory ``Dataset`` so the proven engine path runs unchanged.

@@ -222,7 +222,7 @@ def run_attribution(generator, corrector,
     cell_importance = attribution.sum(dim=1)        # SIGNED: net per-cell push (+ -> target_class/Severe, - -> HC)
 
     # When patient-level attribution is skipped, derive cell-type importance from the
-    # cell-level attribution (mean |cell push| per cell type) and return early — no
+    # cell-level attribution (mean |cell push| per cell type) and return early -- no
     # patient-vector IG, no per-donor outputs are computed at all.
     if skip_patient_level:
         celltype_importance = torch.zeros(K, device=cell_importance.device)

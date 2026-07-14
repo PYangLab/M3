@@ -269,7 +269,7 @@ def run_M3(modality1_path, modality2_path, modality3_path, metadata_path, save_p
     
     generator = M3_model_wo_condition(n_features,
                                      batch_classify_dim=n_unique_batch, 
-                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim, embedding_dim]).to(device)
+                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim] * len(n_features)).to(device)
     
     generator = train_M3_wo_condition(all_dl, val_dl, generator, criterion_smooth_cty, criterion, criterion_kl, device,
                                                        lr=lr, num_epochs=num_epochs, batch_classify_dim=n_unique_batch, condition_dim=n_unique_conditions,    min_delta=min_delta,
@@ -361,7 +361,7 @@ def run_M3(modality1_path, modality2_path, modality3_path, metadata_path, save_p
     
     generator = M3_model(n_features,
                                      batch_classify_dim=n_unique_batch, 
-                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim, embedding_dim]).to(device)
+                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim] * len(n_features)).to(device)
     
     generator = train_M3(all_dl, val_dl, generator, criterion_smooth_cty, criterion, criterion_kl, device,
                                                        lr=lr, num_epochs=num_epochs, batch_classify_dim=n_unique_batch, condition_dim=n_unique_conditions,   min_delta = min_delta,
@@ -595,7 +595,7 @@ def run_M3_update(modality1_path, modality2_path, modality3_path, metadata_path,
     
     generator = M3_model(n_features,
                                      batch_classify_dim=n_unique_batch, 
-                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim, embedding_dim]).to(device)
+                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim] * len(n_features)).to(device)
     
     generator = train_M3(all_dl, val_dl, generator, criterion_smooth_cty, criterion, criterion_kl, device,
                                                        lr=lr, num_epochs=num_epochs, batch_classify_dim=n_unique_batch, condition_dim=n_unique_conditions,   min_delta = min_delta,
@@ -822,7 +822,7 @@ def run_M3_update_after_imputation(modality1_path, modality2_path, modality3_pat
     
     generator = M3_model(n_features,
                                      batch_classify_dim=n_unique_batch, 
-                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim, embedding_dim]).to(device)
+                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim] * len(n_features)).to(device)
     
     generator = train_M3(all_dl, val_dl, generator, criterion_smooth_cty, criterion, criterion_kl, device,
                                                        lr=lr, num_epochs=num_epochs, batch_classify_dim=n_unique_batch, condition_dim=n_unique_conditions,   min_delta = min_delta,
@@ -1020,7 +1020,7 @@ def run_M3_update_after_imputation(modality1_path, modality2_path, modality3_pat
     
 #     generator = M3_model(n_features,
 #                                      batch_classify_dim=n_unique_batch,
-#                                      condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim, embedding_dim]).to(device)
+#                                      condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim] * len(n_features)).to(device)
     
 #     generator = train_M3(all_dl, val_dl, generator, criterion_smooth_cty, criterion, criterion_kl, device,
 #                                                        lr=lr, num_epochs=num_epochs, batch_classify_dim=n_unique_batch, condition_dim=n_unique_conditions,   min_delta = min_delta,
@@ -1158,7 +1158,7 @@ def run_M3_update_no_classify(modality1_path, modality2_path, modality3_path, me
 
     generator = M3_model(n_features,
                                      batch_classify_dim=n_unique_batch,
-                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim, embedding_dim]).to(device)
+                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim] * len(n_features)).to(device)
 
     generator = train_M3(all_dl, val_dl, generator, criterion_smooth_cty, criterion, criterion_kl, device,
                                                        lr=lr, num_epochs=num_epochs, batch_classify_dim=n_unique_batch, condition_dim=n_unique_conditions,   min_delta = min_delta,
@@ -1358,7 +1358,7 @@ def run_M3_update_no_classify(modality1_path, modality2_path, modality3_path, me
     
 #     generator = M3_model(n_features,
 #                                      batch_classify_dim=n_unique_batch,
-#                                      condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim, embedding_dim]).to(device)
+#                                      condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim] * len(n_features)).to(device)
     
 #     generator = train_M3_with_query(all_dl, val_dl, generator, criterion_smooth_cty, criterion, criterion_kl, device,
 #                                                        lr=lr, num_epochs=num_epochs, batch_classify_dim=n_unique_batch, condition_dim=n_unique_conditions,   min_delta = min_delta,
@@ -1506,7 +1506,7 @@ def run_M3_update_with_query(modality1_path, modality2_path, modality3_path, met
 
     generator = M3_model(n_features,
                                      batch_classify_dim=n_unique_batch,
-                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim, embedding_dim]).to(device)
+                                     condition_dim=n_unique_conditions, z_dim=embedding_dim, hidden_features=[embedding_dim] * len(n_features)).to(device)
 
     generator = train_M3_with_query(all_dl, val_dl, generator, criterion_smooth_cty, criterion, criterion_kl, device,
                                                        lr=lr, num_epochs=num_epochs, batch_classify_dim=n_unique_batch, condition_dim=n_unique_conditions,   min_delta = min_delta,

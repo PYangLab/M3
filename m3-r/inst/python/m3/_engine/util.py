@@ -221,7 +221,7 @@ def plot_umaps(data, metadata, color_keys, n_pcs: int = 30, n_neighbors: int = 1
     sc.tl.umap(adata, random_state=random_state)
     for key in color_keys:
         if key not in adata.obs:
-            print(f"⚠️  Warning: `{key}` not found in metadata; skip.")
+            print(f"  Warning: `{key}` not found in metadata; skip.")
             continue
         sc.pl.umap(adata, color=key, size=point_size, show=True)
     return adata 
