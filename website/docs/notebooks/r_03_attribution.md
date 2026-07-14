@@ -1,6 +1,6 @@
 # Feature attribution
 
-m3 explains its donor-level disease prediction with **end-to-end integrated gradients**, attributing the prediction back to **genes/proteins**, **cell types**, and **donors**. We train on the full demo reference, then call `m3_attribute(reference_labels = "HC")` (HC = the healthy integrated-gradients baseline) and visualise the rankings.
+Once m3 can predict disease, attribution asks which genes, cells and cell types drove that prediction. We train on the full reference, then trace each prediction back to the genes, cells, and cell types behind it.
 
 ## 1. Load the demo dataset
 
@@ -12,9 +12,9 @@ data
 #> m3_dataset(n_cells=30534, batches=[B1, B2, B3], modalities=[rna:1000, adt:192])
 ```
 
-## 2. Train (integration VAE + donor predictor on the full reference)
+## 2. Build and train the model
 
-Attribution runs through the trained `(generator, corrector)`, so we provide `donor_key` + `celltype_key` (no held-out batch — we attribute on the full set). The donor-predictor knobs default to the from-scratch driver values.
+Same setup as the patient-prediction tutorial, minus the held-out batch (we attribute on the full reference). `m3_train(...)` fits both the integration model and the disease predictor; attribution explains that predictor.
 
 ``` r
 #To save time, users can set max_epochs to 100 for test.
@@ -34,12 +34,12 @@ m3_capabilities(model)
 #>           TRUE           TRUE           TRUE
 ```
 
-## 3. Attribute: Severe vs HC baseline
+## 3. Attribute and rank the cell types
+
+`m3_attribute(model, reference_labels = "HC")` scores how much each gene, cell, and cell type pushed the prediction away from the reference label (HC, i.e. healthy). Here we look at the **top cell types**: `m3_top_celltypes(...)` ranks them, keeping only cell types with enough cells in each condition so a small group can't mislead the ranking.
 
 ``` r
 attr <- m3_attribute(model, reference_labels = "HC")   # n_steps defaults to 50
-attr
-#> m3_attribution(target=Severe, genes=1192, celltypes=17, donors=63)
 cat("\ntop cell types (>= 200 cells per condition):\n")
 #> 
 #> top cell types (>= 200 cells per condition):
@@ -58,9 +58,9 @@ print(m3_top_celltypes(attr, min_cells_per_condition = 200L))
 #> 11           B_Naive   1.832521
 ```
 
-### Per-celltype-balanced gene ranking (the publication recipe)
+## 4. Top genes
 
-`attr$genes` is the **raw** ranking — `mean(|IG|)` over all cells. The publication recipe drops cell types with \< 200 cells in either condition, scores each gene by `mean(|gene x celltype IG|)` over the kept cell types, excludes housekeeping / ribosomal genes, and (optionally) restricts to one modality.
+`m3_top_genes(...)` ranks the genes by how strongly they drove the prediction. `min_cells_per_condition` keeps only cell types with enough cells in each condition (so a tiny group can't dominate the ranking), and housekeeping / ribosomal genes are dropped.
 
 ``` r
 top100_rna <- m3_top_genes(attr, n = 100L, min_cells_per_condition = 200L, modality = "rna")
@@ -86,50 +86,4 @@ print(utils::head(top100_rna, 15))
 #> 15  FAM65B      rna 0.001314393               11
 ```
 
-## 4. Visualise — top genes, top cell types, gene x celltype heatmap
-
-``` r
-g <- utils::head(top100_rna, 20)
-p1 <- ggplot(g, aes(stats::reorder(feature, score), score)) +
-  geom_col(fill = "#4c72b0") + coord_flip() +
-  labs(title = "Top-20 RNA genes (per-celltype-balanced, housekeeping excluded)",
-       x = NULL, y = "mean |IG| across balanced cell types") +
-  theme_classic() + theme(axis.text.y = element_text(size = 7))
-
-c20 <- m3_top_celltypes(attr, min_cells_per_condition = 200L)
-p2 <- ggplot(c20, aes(stats::reorder(celltype, importance), importance)) +
-  geom_col(fill = "#dd8452") + coord_flip() +
-  labs(title = "Cell-type importance (>= 200 cells per condition)", x = NULL, y = "importance") +
-  theme_classic() + theme(axis.text.y = element_text(size = 8))
-print(p1); print(p2)
-```
-
-<img src="../r_03_attribution_media/5d3b76c8399a535f6d2e37252fc3a6404f24aed4.png" width="1344" /><img src="../r_03_attribution_media/15db5918c1b56efbcebae5ba1519f4e3488b76a9.png" width="1344" />
-
-### Gene x cell-type attribution heatmap (top-30 RNA genes)
-
-``` r
-gcm <- m3_gene_celltype_matrix(attr)                 # celltype x feature
-top_features <- utils::head(top100_rna$feature, 30)
-idx <- match(top_features, attr$feature_names)
-sub <- gcm[, idx, drop = FALSE]
-hm <- expand.grid(celltype = attr$celltype_names, feature = top_features,
-                  stringsAsFactors = FALSE)
-hm$value <- as.vector(sub)
-hm$feature <- factor(hm$feature, levels = top_features)
-hm$celltype <- factor(hm$celltype, levels = attr$celltype_names)
-lim <- max(abs(hm$value), na.rm = TRUE)
-ggplot(hm, aes(feature, celltype, fill = value)) +
-  geom_tile() +
-  scale_fill_gradient2(low = "#053061", mid = "white", high = "#67001f",
-                       midpoint = 0, limits = c(-lim, lim), name = "signed IG") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6),
-        axis.text.y = element_text(size = 7)) +
-  labs(title = "Gene x cell-type attribution (top-30 RNA genes, balanced ranking)",
-       x = NULL, y = NULL)
-```
-
-<img src="../r_03_attribution_media/23b9f87a749b7170693100e5571bef28638f4f91.png" width="1152" />
-
-**Done.** End-to-end integrated-gradients attribution: ranked gene/protein, cell-type and donor importance for the Severe-vs-HC prediction.
+**Done.** The genes, cells, and cell types behind m3's Severe-vs-HC prediction.

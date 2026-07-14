@@ -12,14 +12,11 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE, warning 
 library(ggplot2)
 ```
 
-This tutorial trains an **m3** integration model on the multi-batch, multimodal
-(RNA + ADT) **Liu et al.** COVID-19 dataset and produces a batch-corrected,
-condition-aware **cell embedding**.
+The goal: turn raw, multi-batch, multi-modal single-cell data into one clean
+**embedding**, a handful of coordinates per cell that mix the batches together
+while keeping the biology, so you can cluster and analyze all your data as one.
 
-m3's latent is **disentangled**: a cell-intrinsic part, a small per-condition
-part, and a batch part. `m3_embedding(part = "bio")` returns the biology
-(intrinsic + conditions, batch removed) — the representation you use for
-clustering / UMAP.
+This runs on the full **Liu et al.** COVID-19 dataset (RNA + ADT).
 
 ```{r libs}
 library(m3)
@@ -44,14 +41,22 @@ data <- m3_concat(cohorts)
 data
 ```
 
-## 2. Build and train the integration model
+## 2. Build and train the model
 
-We declare the column roles. For *pure* representation learning we set
-`donor_prediction = FALSE` so only the integration VAE is trained (the
-donor-level disease predictor is Tutorial 2). `embedding_dim` is the latent
-width. `batch_key` (default `"batch"`) names the obs column of batch labels
-(B1/B2/B3) the VAE balances and corrects across — a real input even here.
-`seed = 0` makes the (otherwise unseeded) Stage-1 VAE reproducible.
+`m3_train(...)` sets up the model from your data and fits it, telling it which
+obs columns to use:
+
+- `condition_keys`, the conditions you're comparing across (here disease group +
+  age band).
+- `celltype_key`, the column holding cell-type labels.
+- `batch_key`, the column marking which batch each cell is from (B1/B2/B3). The
+  model corrects for batch, so cells group by biology rather than by batch.
+- `embedding_dim`, how many numbers describe each cell in the output (here 30).
+
+`donor_prediction = FALSE` fits only the integration model and skips the
+disease-prediction step (not needed for embeddings, and faster). `seed = 0`
+makes the run reproducible. Afterwards `m3_capabilities(model)` shows which
+outputs are available.
 
 ```{r train}
 model <- m3_train(
@@ -68,10 +73,18 @@ model
 m3_capabilities(model)
 ```
 
-## 3. Extract the disentangled embeddings
+## 3. Get the embedding
 
-`part = "bio"` = cell-intrinsic + condition latents (batch removed) — the
-integrated biological representation. `part = "batch"` isolates the batch latent.
+`m3_embedding(model, part = ...)` returns the trained coordinates as a
+cells x embedding_dim matrix. Ask for the part you want by name:
+
+- `"bio"`, the biological signal, with batch differences removed. This is the
+  one you cluster and analyze.
+- `"batch"`, the batch signal on its own, if you ever want to inspect it
+  separately.
+
+`m3_cell_metadata(model)` is the per-cell obs table, row-aligned with the
+embedding.
 
 ```{r embed}
 emb_bio       <- m3_embedding(model, part = "bio")
@@ -86,8 +99,8 @@ cat(sprintf("bio: %s | intrinsic: %s | batch: %s\n",
 
 ## 4. Save the embedding + metadata
 
-m3 returns plain matrices, so persist them however you like — here as CSV and an
-`.rds`.
+Save the embedding and its metadata. m3 returns plain matrices, so persist them
+however you like, here as CSV and an `.rds`.
 
 ```{r save}
 out <- file.path(tempdir(), "m3_tut1")
@@ -100,10 +113,9 @@ cat("saved embedding to", out, "\n")
 
 ## 5. Visualise with UMAP
 
-We project the *bio* embedding with the **same** UMAP m3's Python tutorial uses
-(scanpy's `neighbors` + `umap`, computed in the engine env via reticulate), so
-the coordinates match exactly. Good integration = cell types form clean clusters
-while batches are mixed.
+A UMAP of the `"bio"` embedding. If integration worked, cells should group by
+**cell type** (biology kept) while the **batches mix together** (batch difference
+removed), colour by each to check.
 
 ```{r umap-bio, fig.width = 16, fig.height = 5}
 xy <- m3_umap(emb_bio, method = "scanpy", n_neighbors = 15L, device = model$device)
@@ -126,23 +138,9 @@ print(plt("batch",     "Batch (batch mixed)"))
 print(plt("condition", "Condition"))
 ```
 
-### Batch latent (the part m3 *removed* from "bio")
-
-Colouring a UMAP of the **batch** latent by batch shows the batch structure m3
-isolates into the batch dimension and keeps out of the biological embedding.
-
-```{r umap-batch, fig.width = 6, fig.height = 5}
-xy_b <- m3_umap(emb_batch, method = "scanpy", n_neighbors = 15L, device = model$device)
-ggplot(data.frame(UMAP1 = xy_b[, 1], UMAP2 = xy_b[, 2], batch = factor(meta$batch)),
-       aes(UMAP1, UMAP2, colour = batch)) +
-  geom_point(size = 0.4, alpha = 0.8) + theme_classic() +
-  theme(axis.text = element_blank(), axis.ticks = element_blank()) +
-  labs(title = "Batch latent — batch signal", colour = NULL)
-```
-
-**Done.** We trained one m3 model on three batches and obtained an integrated,
-condition-aware cell embedding plus UMAPs. Tutorial 2 builds on the same model
-object to predict donor-level disease status.
+**Done.** You now have an integrated cell embedding, ready for clustering and
+downstream analysis. The patient-prediction tutorial builds on the same model to
+predict donor-level disease status.
 
 ```{r cleanup, include = FALSE}
 m3_shutdown()
