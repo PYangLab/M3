@@ -43,8 +43,19 @@ needs a few more:
 - `held_out`, the batch(es) to hold back; these donors' `target_condition` labels
   are hidden during training and predicted at the end.
 
-The `donor_predictor` list holds the predictor's training settings (learning rate,
-epochs, and how strongly / on what schedule the batch effect is removed).
+The donor predictor summarises each donor as a cell-type-balanced mean of the
+latent embedding, then removes batch effects from it by adversarial domain
+adaptation: a **corrector** reshapes the profile while a **batch discriminator**
+tries to identify the batch from it, and the corrector is trained to predict
+disease while preventing the discriminator from succeeding. The `donor_predictor`
+settings:
+
+- `patient_w` — weight of the donor objective relative to the cell-level VAE loss.
+- `adv_max` — the maximum strength of batch removal.
+- `adv_warmup` — number of epochs over which batch-removal strength ramps from 0 to `adv_max`.
+- `n_disc` — discriminator updates per corrector update.
+- `glr`, `n_epochs` — the corrector's learning rate and number of epochs.
+
 `m3_reference_vocab(model)` shows the label set the model learned to predict (the
 held-out donors' labels never enter it).
 
