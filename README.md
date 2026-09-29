@@ -16,7 +16,7 @@ generation, and multi-resolution attribution.
 M3 runs on Linux with Python 3.10–3.12. All dependencies are installed automatically via pip (see `pyproject.toml`), and no non-standard hardware is required (a GPU is optional).
 
 ## Install
-Installation typically takes a few seconds.
+Installation typically takes a few minutes (a few seconds if PyTorch is already installed).
 
 ### Python
 
