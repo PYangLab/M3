@@ -11,7 +11,12 @@ generation, and multi-resolution attribution.
 
 📖 **Documentation & tutorials:** https://pyanglab.github.io/M3/
 
+## System requirements
+
+M3 runs on Linux with Python 3.10–3.12. All dependencies are installed automatically via pip (see `pyproject.toml`), and no non-standard hardware is required (a GPU is optional).
+
 ## Install
+Installation typically takes a few seconds.
 
 ### Python
 
@@ -27,7 +32,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu121
 pip install m3-sc
 ```
 
-For the development version: `pip install "git+https://github.com/PYangLab/M3.git"`.
+For the development version: `pip install "git+https://github.com/PYangLab/M3.git"`. 
 
 ### R
 
@@ -50,6 +55,15 @@ model = m3.M3(data, condition_keys=["cond_group"],
               celltype_key="mergedcelltype").train()
 emb   = model.embedding(part="bio")                             # integrated embedding
 ```
+More demos, together with their expected outputs, are available in the [tutorials](https://pyanglab.github.io/M3/).
+
+## Using M3 on your own data
+
+M3 takes raw counts. Each batch needs a count matrix (RNA and/or ADT and/or ATAC)
+and cell metadata with donor, cell type, condition and batch columns. Load batches
+with `m3.read_h5ad` (or `m3.read_h5` / `m3.from_anndata`), combine them with `m3.concat`,
+then build and train the model as in the Quickstart. See the
+[documentation](https://pyanglab.github.io/M3/) for the full workflow.
 
 ## Repository layout
 
