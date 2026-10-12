@@ -74,5 +74,15 @@
   obs <- as.data.frame(lapply(obs, function(col) {
     if (is.factor(col)) as.character(col) else col
   }), stringsAsFactors = FALSE, check.names = FALSE)
+  # Keep the cell names as a column: readouts are not guaranteed to come back in
+  # input order (see m3_cell_metadata()), so this is what aligns them to `x`.
+  cells <- rownames(counts$rna)
+  if (!is.null(cells)) {
+    if ("obs_names" %in% names(obs) && !identical(as.character(obs$obs_names), cells)) {
+      stop("obs already has an 'obs_names' column that differs from the cell names; ",
+           "rename it before converting.")
+    }
+    obs$obs_names <- cells
+  }
   list(counts = counts, var = var, obs = obs)
 }

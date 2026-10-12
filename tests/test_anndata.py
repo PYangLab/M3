@@ -54,3 +54,26 @@ def test_read_h5ad_roundtrip(tmp_path):
     # obs rows still align with their count rows (row i of X starts at 3*i)
     counts = d.modalities["rna"].toarray()
     assert np.allclose(counts[:, 0], np.arange(n, dtype=np.float32) * 3)
+
+
+def test_from_anndata_keeps_obs_names_as_column():
+    # Readouts are not guaranteed to come back in input order, so the barcodes must
+    # survive the read as a column for the caller to align on.
+    X = np.array([[1, 0, 2], [0, 3, 1]], dtype=np.float32)
+    a = ad.AnnData(X=X, obs=pd.DataFrame({"disease": ["hc", "covid"]}, index=["c1", "c2"]),
+                   var=pd.DataFrame(index=["g1", "g2", "g3"]))
+    d = m3.from_anndata(a, batch="A")
+    assert list(d.obs["obs_names"]) == ["c1", "c2"]
+    assert list(a.obs.columns) == ["disease"]          # caller's AnnData untouched
+
+
+def test_from_anndata_rejects_conflicting_obs_names_column():
+    X = np.array([[1, 0, 2], [0, 3, 1]], dtype=np.float32)
+    a = ad.AnnData(X=X, obs=pd.DataFrame({"obs_names": ["x", "y"]}, index=["c1", "c2"]),
+                   var=pd.DataFrame(index=["g1", "g2", "g3"]))
+    try:
+        m3.from_anndata(a)
+    except ValueError as e:
+        assert "obs_names" in str(e)
+    else:
+        raise AssertionError("expected ValueError")

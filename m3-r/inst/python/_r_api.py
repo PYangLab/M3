@@ -192,6 +192,7 @@ def model_train(dataset_handle, *, condition_keys, target_condition=None,
             balance_batches=bool(balance_batches),
             donor_prediction=(None if donor_prediction is None else bool(donor_prediction)),
             donor_predictor=(dict(donor_predictor) if donor_predictor else None),
+            seed=(None if seed is None else int(seed)),
         )
     h = _put(model)
     return {

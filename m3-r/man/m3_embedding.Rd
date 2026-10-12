@@ -13,8 +13,9 @@ m3_embedding(model, part = "bio")
 "intrinsic", "batch", or one of the model's condition keys.}
 }
 \value{
-a numeric matrix, cells x latent dimensions (row order matches
-  \code{\link{m3_cell_metadata}}).
+a numeric matrix, cells x latent dimensions. Row order matches
+  \code{\link{m3_cell_metadata}}, not necessarily the input: align on its
+  \code{obs_names} column rather than by position.
 }
 \description{
 Cell-level latent embedding.

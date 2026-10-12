@@ -49,6 +49,14 @@ test_that("reproducible: same seed -> identical embedding", {
                               embedding_dim = 12L, donor_prediction = FALSE,
                               max_epochs = 3L, seed = 0L, device = "cpu"), "bio")
   expect_equal(max(abs(e1 - e2)), 0)
+  # ... and the seed is the thing doing it: a different seed is a different run.
+  e3 <- m3_embedding(m3_train(d, condition_keys = "cond_group", celltype_key = "mergedcelltype",
+                              embedding_dim = 12L, donor_prediction = FALSE,
+                              max_epochs = 3L, seed = 1L, device = "cpu"), "bio")
+  expect_gt(max(abs(e1 - e3)), 0)
+  expect_true("obs_names" %in% colnames(m3_cell_metadata(m3_train(
+    d, condition_keys = "cond_group", celltype_key = "mergedcelltype", embedding_dim = 12L,
+    donor_prediction = FALSE, max_epochs = 1L, device = "cpu"))))
 })
 
 test_that("held_out_samples: hold out donors across batches", {

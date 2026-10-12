@@ -264,7 +264,7 @@ given — the Stage-2 adversarial donor-level disease predictor on top. With
 | `target_condition` | the condition to predict / attribute (default: the first of `condition_keys`). |
 | `celltype_key` | cell-type role column; the donor predictor + attribution need `donor_key` + `celltype_key` (default `NULL`). |
 | `donor_key` | donor/sample role column; needed by the donor predictor + attribution (default `NULL`). |
-| `batch_key` | batch role column (effective default `"batch"`); the held-out / integration unit and the site the donor adversary removes. |
+| `batch_key` | batch role column (effective default `"batch"`); the held-out / integration unit and the site the donor adversary removes. After training, the `batch` column of `m3_cell_metadata()` holds this column's values. |
 | `held_out` | character vector of batch labels to hold out as an unlabelled query set (default `NULL`). |
 | `held_out_samples` | character vector of donor IDs to hold out as the query set, possibly spanning batches; mutually exclusive with `held_out` (default `NULL`). |
 | `hvg` | optional named list of per-modality HVG counts, e.g. `list(rna = 1000)` (default `NULL` = all features). |
@@ -346,7 +346,17 @@ Maps to Python `M3.contract["reference_vocab"]`.
 m3_embedding(model, part = "bio")
 ```
 
-Cell-level latent embedding, row-aligned to [`m3_cell_metadata()`](#m3_cell_metadata).
+Cell-level latent embedding, row-aligned to [`m3_cell_metadata()`](#m3_cell_metadata)
+— **not** necessarily to the input. Rows are grouped by batch; with `held_out` /
+`held_out_samples` they are reference cells then query cells. Align on the `obs_names` column (the input's
+cell names), never by position:
+
+```r
+emb <- m3_embedding(model, "intrinsic")
+rownames(emb) <- m3_cell_metadata(model)$obs_names
+emb <- emb[match(colnames(sce), rownames(emb)), ]
+```
+
 `part` selects the factor(s): `"bio"` (intrinsic + condition latents, batch
 removed — the integration embedding for clustering / UMAP), `"intrinsic"`,
 `"batch"`, or any of the model's condition keys.
