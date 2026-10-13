@@ -12,8 +12,9 @@ m3_predict_donors(model, include_reference = FALSE)
 \item{include_reference}{also return the reference donors (default FALSE).}
 }
 \value{
-a data.frame: \code{donor}, \code{is_reference}, \code{predicted_label},
-  and one \code{prob_<label>} column per class.
+a data.frame: a donor column named after \code{donor_key} (e.g.
+  \code{sample_id}), \code{is_reference}, \code{predicted_label}, and one
+  \code{prob_<label>} column per class.
 }
 \description{
 Returns per-donor predicted label + class probabilities. By default only the

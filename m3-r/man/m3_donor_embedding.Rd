@@ -10,8 +10,9 @@ m3_donor_embedding(model)
 \item{model}{an \code{m3_model} trained with a donor predictor.}
 }
 \value{
-a data.frame with a \code{donor} column, an \code{is_reference} flag,
-  and the embedding dimensions (\code{m3_0}, \code{m3_1}, ...).
+a data.frame with a donor column named after \code{donor_key} (e.g.
+  \code{sample_id}), an \code{is_reference} flag, and the embedding dimensions
+  (\code{m3_0}, \code{m3_1}, ...).
 }
 \description{
 Patient/donor-level embedding (the corrected donor vectors classified).

@@ -26,7 +26,7 @@ test_that("full pipeline runs on the example SCE (CPU)", {
                   donor_predictor = list(n_epochs = 3L), seed = 0L, device = "cpu")
   expect_true(m3_capabilities(m2)["predict_donors"])
   preds <- m3_predict_donors(m2)
-  expect_true(all(c("donor", "predicted_label") %in% colnames(preds)))
+  expect_true(all(c("sample_id", "predicted_label") %in% colnames(preds)))
   expect_gt(nrow(preds), 0L)            # B2 donors are disjoint from B1
 
   # attribution + augmentation
@@ -71,5 +71,5 @@ test_that("held_out_samples: hold out donors across batches", {
                 embedding_dim = 12L, max_epochs = 2L,
                 donor_predictor = list(n_epochs = 3L), seed = 0L, device = "cpu")
   preds <- m3_predict_donors(m)
-  expect_setequal(as.character(preds$donor), as.character(held))   # query == the held-out donors
+  expect_setequal(as.character(preds$sample_id), as.character(held))   # query == the held-out donors
 })

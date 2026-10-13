@@ -405,7 +405,8 @@ probabilities. Requires the donor predictor. By default only the held-out query
 donors are returned; pass `include_reference = TRUE` to include the reference
 donors too.
 
-**Returns:** a `data.frame`: `donor`, `is_reference`, `predicted_label`, and one
+**Returns:** a `data.frame`: a donor column named after `donor_key` (e.g. `sample_id`),
+`is_reference`, `predicted_label`, and one
 `prob_<label>` column per class.
 
 Maps to Python [`M3.predict_donors()`](api-python.md#m3predict_donors).
@@ -419,7 +420,8 @@ m3_donor_embedding(model)
 The corrected per-donor vectors that get classified — a patient-level embedding.
 Requires the donor predictor.
 
-**Returns:** a `data.frame` with a `donor` column, an `is_reference` flag, and the
+**Returns:** a `data.frame` with a donor column named after `donor_key` (e.g.
+`sample_id`), an `is_reference` flag, and the
 embedding dimensions (`m3_0`, `m3_1`, …).
 
 Maps to Python [`M3.donor_embedding()`](api-python.md#m3donor_embedding).
