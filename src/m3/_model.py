@@ -308,6 +308,7 @@ class M3:
         self._all_b = self._all_b.to(self._device).long()
         self._all_mask_poe = self._all_mask_poe.to(self._device)
         shutil.rmtree(marshalled["tmpdir"], ignore_errors=True)
+        shutil.rmtree(save_path, ignore_errors=True)
 
         self.capabilities["embedding"] = True
         self.capabilities["reconstruct"] = True
