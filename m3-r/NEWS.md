@@ -1,16 +1,3 @@
-# m3 (development version)
-
-* `m3_train(seed=)` now reaches training. It was overridden by the engine's own
-  default, so every run used seed 0 whatever was passed. **Results change for any
-  non-zero seed**; `seed = NULL` now gives the unseeded behaviour it documents.
-* `batch_key` now selects the batches that are integrated. Integration always
-  grouped by the column literally named `batch`, so a different `batch_key` was
-  silently trained as one batch with no batch correction. **Results change when
-  `batch_key` is not `"batch"`.** A single-batch dataset now warns.
-* Inputs keep their cell names in an `obs_names` column, returned by
-  `m3_cell_metadata()`. Read-out rows are not guaranteed to be in input order, so
-  align on that column rather than by position.
-
 # m3 0.3.0
 
 * First R release: object-in / object-out interface to the `m3-sc` Python engine.
