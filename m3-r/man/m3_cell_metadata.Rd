@@ -11,6 +11,7 @@ m3_cell_metadata(model)
 }
 \value{
 a data.frame (reference rows first, then any held-out query rows).
+  Its \code{obs_names} column holds the input's cell names.
 }
 \description{
 Row-aligned cell metadata for the embedding / reconstruction rows.

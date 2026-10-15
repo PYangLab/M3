@@ -64,6 +64,22 @@ class M3:
             if col is not None and col not in dataset.obs.columns:
                 raise ValueError(f"{nm} '{col}' not in dataset.obs.")
 
+        # The engine groups cells for integration by obs['batch']. Route batch_key
+        # there (on a copy; the caller's Dataset is untouched) so the column the user
+        # named is the one that is integrated, held out and validated against.
+        if batch_key != "batch":
+            clash = [k for k in (*condition_keys, donor_key, celltype_key) if k == "batch"]
+            if clash:
+                raise ValueError(
+                    "obs column 'batch' is used as a role column and would be overwritten "
+                    f"by batch_key='{batch_key}'; rename one of them.")
+            import dataclasses
+            dataset = dataclasses.replace(
+                dataset, obs=dataset.obs.assign(batch=dataset.obs[batch_key]))
+        if dataset.obs["batch"].nunique() == 1:
+            warnings.warn(
+                "only one batch found; no batch correction will be applied.", stacklevel=2)
+
         self.dataset = dataset
         self.condition_keys = list(condition_keys)
         self.target_condition = target_condition or self.condition_keys[0]
@@ -292,6 +308,7 @@ class M3:
         self._all_b = self._all_b.to(self._device).long()
         self._all_mask_poe = self._all_mask_poe.to(self._device)
         shutil.rmtree(marshalled["tmpdir"], ignore_errors=True)
+        shutil.rmtree(save_path, ignore_errors=True)
 
         self.capabilities["embedding"] = True
         self.capabilities["reconstruct"] = True

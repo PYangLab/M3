@@ -36,3 +36,18 @@ test_that(".as_m3_parts handles a plain list with obs", {
   expect_equal(dim(parts$counts$rna), c(5L, 4L))
   expect_equal(nrow(parts$obs), 5L)
 })
+
+test_that(".as_m3_parts keeps the cell names as an obs column", {
+  # Readouts are not guaranteed to come back in input order, so the cell names
+  # must survive the conversion as a column for the caller to align on.
+  rna <- matrix(1:20, 4, 5, dimnames = list(paste0("g", 1:4), paste0("c", 1:5)))
+  obs <- data.frame(batch = rep("a", 5), cond_group = rep("HC", 5))
+  parts <- m3:::.as_m3_parts(list(rna = rna, obs = obs))
+  expect_equal(parts$obs$obs_names, paste0("c", 1:5))
+
+  sce <- m3_example_sce(n_cells = 40L, seed = 2L)
+  expect_equal(m3:::.as_m3_parts(sce)$obs$obs_names, colnames(sce))
+
+  obs$obs_names <- paste0("x", 1:5)
+  expect_error(m3:::.as_m3_parts(list(rna = rna, obs = obs)), "obs_names")
+})

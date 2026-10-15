@@ -5,8 +5,9 @@
 #' @param model an \code{m3_model}.
 #' @param part one of "bio" (intrinsic + condition latents, batch removed),
 #'   "intrinsic", "batch", or one of the model's condition keys.
-#' @return a numeric matrix, cells x latent dimensions (row order matches
-#'   \code{\link{m3_cell_metadata}}).
+#' @return a numeric matrix, cells x latent dimensions. Row order matches
+#'   \code{\link{m3_cell_metadata}}, not necessarily the input: align on its
+#'   \code{obs_names} column rather than by position.
 #' @examples
 #' \donttest{
 #'   emb <- m3_embedding(model, part = "bio")
@@ -32,6 +33,7 @@ m3_reconstruct <- function(model, remove_batch = TRUE) {
 #'
 #' @param model an \code{m3_model}.
 #' @return a data.frame (reference rows first, then any held-out query rows).
+#'   Its \code{obs_names} column holds the input's cell names.
 #' @export
 m3_cell_metadata <- function(model) {
   m <- .resolve_m3(model)

@@ -26,7 +26,7 @@ test_that("full pipeline runs on the example SCE (CPU)", {
                   donor_predictor = list(n_epochs = 3L), seed = 0L, device = "cpu")
   expect_true(m3_capabilities(m2)["predict_donors"])
   preds <- m3_predict_donors(m2)
-  expect_true(all(c("donor", "predicted_label") %in% colnames(preds)))
+  expect_true(all(c("sample_id", "predicted_label") %in% colnames(preds)))
   expect_gt(nrow(preds), 0L)            # B2 donors are disjoint from B1
 
   # attribution + augmentation
@@ -49,6 +49,14 @@ test_that("reproducible: same seed -> identical embedding", {
                               embedding_dim = 12L, donor_prediction = FALSE,
                               max_epochs = 3L, seed = 0L, device = "cpu"), "bio")
   expect_equal(max(abs(e1 - e2)), 0)
+  # ... and the seed is the thing doing it: a different seed is a different run.
+  e3 <- m3_embedding(m3_train(d, condition_keys = "cond_group", celltype_key = "mergedcelltype",
+                              embedding_dim = 12L, donor_prediction = FALSE,
+                              max_epochs = 3L, seed = 1L, device = "cpu"), "bio")
+  expect_gt(max(abs(e1 - e3)), 0)
+  expect_true("obs_names" %in% colnames(m3_cell_metadata(m3_train(
+    d, condition_keys = "cond_group", celltype_key = "mergedcelltype", embedding_dim = 12L,
+    donor_prediction = FALSE, max_epochs = 1L, device = "cpu"))))
 })
 
 test_that("held_out_samples: hold out donors across batches", {
@@ -63,5 +71,5 @@ test_that("held_out_samples: hold out donors across batches", {
                 embedding_dim = 12L, max_epochs = 2L,
                 donor_predictor = list(n_epochs = 3L), seed = 0L, device = "cpu")
   preds <- m3_predict_donors(m)
-  expect_setequal(as.character(preds$donor), as.character(held))   # query == the held-out donors
+  expect_setequal(as.character(preds$sample_id), as.character(held))   # query == the held-out donors
 })

@@ -7,8 +7,9 @@
 #'
 #' @param model an \code{m3_model} trained with a donor predictor.
 #' @param include_reference also return the reference donors (default FALSE).
-#' @return a data.frame: \code{donor}, \code{is_reference}, \code{predicted_label},
-#'   and one \code{prob_<label>} column per class.
+#' @return a data.frame: a donor column named after \code{donor_key} (e.g.
+#'   \code{sample_id}), \code{is_reference}, \code{predicted_label}, and one
+#'   \code{prob_<label>} column per class.
 #' @examples
 #' \donttest{
 #'   preds <- m3_predict_donors(model)
@@ -23,8 +24,9 @@ m3_predict_donors <- function(model, include_reference = FALSE) {
 #' Patient/donor-level embedding (the corrected donor vectors classified).
 #'
 #' @param model an \code{m3_model} trained with a donor predictor.
-#' @return a data.frame with a \code{donor} column, an \code{is_reference} flag,
-#'   and the embedding dimensions (\code{m3_0}, \code{m3_1}, ...).
+#' @return a data.frame with a donor column named after \code{donor_key} (e.g.
+#'   \code{sample_id}), an \code{is_reference} flag, and the embedding dimensions
+#'   (\code{m3_0}, \code{m3_1}, ...).
 #' @export
 m3_donor_embedding <- function(model) {
   m <- .resolve_m3(model)

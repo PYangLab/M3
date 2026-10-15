@@ -89,7 +89,16 @@ def from_anndata(adata, *, batch: str = "batch0", modality: str = "rna") -> Data
     Note: only a single AnnData is supported. A dict/MuData (one AnnData per
     modality) input is deferred to a later plan along with the MuData reader.
     """
-    obs = adata.obs.reset_index(drop=True).copy()
+    # Keep the cell barcodes as a column: readouts are not guaranteed to come back in
+    # input order (see M3.cell_metadata), so this is what aligns them to `adata`.
+    obs = adata.obs.copy()
+    names = adata.obs_names.to_numpy()
+    if "obs_names" in obs.columns and not (obs["obs_names"].to_numpy() == names).all():
+        raise ValueError(
+            "adata.obs already has an 'obs_names' column that differs from "
+            "adata.obs_names; rename it before reading.")
+    obs["obs_names"] = names
+    obs = obs.reset_index(drop=True)
     if "feature_types" in adata.var.columns:
         counts: dict = {}
         var: dict = {}

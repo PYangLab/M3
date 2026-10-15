@@ -187,7 +187,7 @@ Nothing is trained yet — call [`train`](#m3train).
 | `target_condition` | the single condition used for prediction / attribution (defaults to the first of `condition_keys`). |
 | `donor_key` | `obs` column identifying a donor/sample. Required for donor-level prediction, attribution, and `augment`. |
 | `celltype_key` | `obs` column with cell-type labels. Required for [`train`](#m3train). |
-| `batch_key` | `obs` column with the batch label (default `"batch"`, written by every reader). It is the integration / held-out unit, the *site* the donor adversary removes, and the stratifier for [`augment(batch=...)`](#m3augment). |
+| `batch_key` | `obs` column with the batch label (default `"batch"`, written by every reader). It is the integration / held-out unit, the *site* the donor adversary removes, and the stratifier for [`augment(batch=...)`](#m3augment). After training, `cell_metadata["batch"]` holds this column's values. A single-batch dataset trains without batch correction and warns. |
 | `held_out` | batch label(s) to hold out as an unlabelled **query** set — their `target_condition` labels are masked during training and recovered by [`predict_donors`](#m3predict_donors). |
 | `held_out_samples` | donor/sample ID(s) to hold out as the **query** set instead of a whole batch — may span batches; requires `donor_key` and is mutually exclusive with `held_out`. Their `target_condition` labels are masked during training and recovered by [`predict_donors`](#m3predict_donors). |
 | `hvg` | `{modality -> n_top}` highly-variable-feature selection, e.g. `{"rna": 1000}`. Omit to use all features as given. |
@@ -241,7 +241,18 @@ available; otherwise CPU.
 M3.embedding(part: str = "bio") -> np.ndarray
 ```
 
-Cell-level latent, row-aligned to [`cell_metadata`](#m3cell_metadata).
+Cell-level latent, row-aligned to [`cell_metadata`](#m3cell_metadata) — **not**
+necessarily to the input. Rows are grouped by batch; with `held_out` /
+`held_out_samples` they are reference cells then query cells. Align on the `obs_names` column
+that [`from_anndata`](#m3from_anndata) / `read_h5ad` carry through, never by
+position:
+
+```python
+emb = pd.DataFrame(model.embedding("intrinsic"),
+                   index=model.cell_metadata["obs_names"])
+adata.obsm["X_m3"] = emb.reindex(adata.obs_names).to_numpy()
+```
+
 `part` selects which factor(s):
 
 - `"bio"` — the intrinsic biological latent plus every condition factor (the
@@ -316,7 +327,9 @@ M3.cell_metadata  # property -> pd.DataFrame
 ```
 
 Row-aligned metadata for [`embedding`](#m3embedding) /
-[`reconstruct`](#m3reconstruct) (reference cells first, then query cells).
+[`reconstruct`](#m3reconstruct) (reference cells first, then query cells). Data read
+with `from_anndata` / `read_h5ad` carries the input barcodes in an `obs_names`
+column; for `read_matrix` / `read_h5`, put an identifier column in `obs` yourself.
 
 ---
 
