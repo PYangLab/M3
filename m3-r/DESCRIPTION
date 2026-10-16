@@ -1,7 +1,7 @@
 Package: m3
 Type: Package
 Title: Multimodal, Multi-Batch, Condition-Aware Single-Cell Modelling
-Version: 0.3.0
+Version: 0.3.1
 Authors@R: c(
     person("Sichang", "Ding", role = c("aut", "cre"), email = "usyddsc@gmail.com"))
 Description: R interface to m3, a multimodal (RNA, ADT, ATAC), multi-batch,
