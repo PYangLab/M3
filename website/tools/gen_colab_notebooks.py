@@ -54,6 +54,30 @@ R_TUTORIALS = ["r_01_representation_learning", "r_02_patient_prediction",
 # 1.12.3 / anndata 0.13.2. Neither moves numpy or pandas, so neither needs a
 # restart, and the 38-test suite passes on the older resolution too.
 #
+# Why the pynndescent step follows:
+#
+# Holding pandas still has a cost. Colab's pandas (2.2.3 as of 2026-11) keeps scanpy
+# at 1.12, since every release from 1.12.1 on requires pandas>=2.3 -- but Colab also
+# preinstalls pynndescent 0.7.0, whose transformer returns a scipy sparse *array*.
+# scanpy before 1.12.5 calls `.getnnz()` on that result, a method sparse arrays do
+# not have, so `sc.pp.neighbors` raised "'csr_array' object has no attribute
+# 'getnnz'" in every tutorial's UMAP cell. Only the pynndescent path is affected,
+# i.e. more than 4096 cells; smaller inputs go through sklearn and work.
+#
+# pip cannot see this: scanpy's metadata asks only for pynndescent>=0.5.13. So the
+# cell checks which scanpy pip actually resolved and, only when it predates the fix,
+# moves pynndescent back below 0.7. The guard expires by itself -- once Colab ships
+# pandas>=2.3 the first install resolves to scanpy>=1.12.5 and pynndescent is left
+# alone. Both literals are release history, not a guess about the future: 0.7 is
+# where pynndescent changed its return type, 1.12.5 is where scanpy stopped assuming
+# the old one. pynndescent is pure Python and not yet imported when this cell runs,
+# so replacing it needs no restart; the numpy/pandas pins ride along on the second
+# install so it cannot move them either.
+#
+# Verified by running, on Python 3.13 / numpy 2.4.6 / pandas 2.2.3 / scipy 1.16.3:
+# scanpy 1.12 + pynndescent 0.7.0 reproduces the error on 30k cells; scanpy 1.12 +
+# pynndescent 0.6.0 passes; scanpy 1.12.5 + pynndescent 0.7.0 (pandas 3.1.1) passes.
+#
 # The published package carries no such constraint: `pip install m3-sc` resolves to
 # the current stack, which is what CI tests. umap-learn and matplotlib are not
 # listed here because scanpy requires both itself.
@@ -62,10 +86,18 @@ R_TUTORIALS = ["r_01_representation_learning", "r_02_patient_prediction",
 # than in the reader's first screen. Keep the numpy/pandas arguments though: without
 # them the install upgrades both and the tutorial breaks at the next cell.
 PY_INSTALL = '''import subprocess, sys, numpy, pandas
+from importlib.metadata import version
+from packaging.version import Version
 
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "m3-sc",
-                f"numpy=={numpy.__version__}", f"pandas=={pandas.__version__}"],
-               check=True)'''
+pins = [f"numpy=={numpy.__version__}", f"pandas=={pandas.__version__}"]
+
+def install(*packages):
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", *packages, *pins],
+                   check=True)
+
+install("m3-sc")
+if Version(version("scanpy")) < Version("1.12.5"):
+    install("pynndescent<0.7")'''
 
 R_INSTALL = '''# Colab setup - run this first, then switch the runtime to R
 # (Runtime > Change runtime type > R). Precompiled Linux binaries via Posit P3M
