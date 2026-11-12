@@ -4,10 +4,20 @@
 \alias{m3_demo}
 \title{Load the built-in Liu et al. CITE-seq demo dataset.}
 \usage{
-m3_demo(device = c("auto", "cpu", "cuda"))
+m3_demo(device = c("auto", "cpu", "cuda"), n_cells = NULL)
 }
 \arguments{
 \item{device}{session device.}
+
+\item{n_cells}{load a smaller, fixed subsample of this many cells instead of
+all 30,534, for a quicker run (training time is proportional to the number
+of cells). The same cells are returned on every call, and they are the cells
+Python's \code{m3.datasets.liu_demo(n_cells=)} returns. Each batch
+contributes equally and every cell type of every batch keeps at least 50
+cells (or all it has). Must be between 2,250 and 21,489. \code{NULL} (the
+default) loads the whole demo. Meant for cell-level integration: donor
+prediction and attribution need enough cells per donor, so use the whole
+demo there.}
 }
 \value{
 an \code{m3_dataset}.
@@ -21,5 +31,6 @@ same \code{liu_demo} object the Python package uses, so demo results match.
 \donttest{
   data <- m3_demo()
   data
+  small <- m3_demo(n_cells = 6000)
 }
 }

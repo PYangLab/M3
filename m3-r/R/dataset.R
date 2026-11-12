@@ -115,16 +115,33 @@ m3_concat <- function(datasets) {
 #' same \code{liu_demo} object the Python package uses, so demo results match.
 #'
 #' @param device session device.
+#' @param n_cells load a smaller, fixed subsample of this many cells instead of
+#'   all 30,534, for a quicker run (training time is proportional to the number
+#'   of cells). The same cells are returned on every call, and they are the cells
+#'   Python's \code{m3.datasets.liu_demo(n_cells=)} returns. Each batch
+#'   contributes equally and every cell type of every batch keeps at least 50
+#'   cells (or all it has). Must be between 2,250 and 21,489. \code{NULL} (the
+#'   default) loads the whole demo. Meant for cell-level integration: donor
+#'   prediction and attribution need enough cells per donor, so use the whole
+#'   demo there.
 #' @return an \code{m3_dataset}.
 #' @examples
 #' \donttest{
 #'   data <- m3_demo()
 #'   data
+#'   small <- m3_demo(n_cells = 6000)
 #' }
 #' @export
-m3_demo <- function(device = c("auto", "cpu", "cuda")) {
+m3_demo <- function(device = c("auto", "cpu", "cuda"), n_cells = NULL) {
   device <- match.arg(device)
-  h <- .m3_call("dataset_demo", .device = device)
+  if (!is.null(n_cells)) {
+    if (!is.numeric(n_cells) || length(n_cells) != 1L || is.na(n_cells) ||
+        n_cells != round(n_cells)) {
+      stop("n_cells must be a single whole number.")
+    }
+    n_cells <- as.integer(n_cells)
+  }
+  h <- .m3_call("dataset_demo", n_cells = n_cells, .device = device)
   new_m3_dataset(h, .dataset_info(h), device)
 }
 

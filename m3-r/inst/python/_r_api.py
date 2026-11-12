@@ -112,8 +112,8 @@ def dataset_concat(handles) -> int:
     return _put(ds)
 
 
-def dataset_demo() -> int:
-    return _put(m3.datasets.liu_demo())
+def dataset_demo(n_cells=None) -> int:
+    return _put(m3.datasets.liu_demo(n_cells=n_cells))
 
 
 def dataset_info(h) -> dict:

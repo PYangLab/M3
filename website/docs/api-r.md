@@ -85,12 +85,18 @@ internally, so do **not** pre–log-normalise the input.
 ### `m3_demo()`
 
 ```r
-m3_demo(device = c("auto", "cpu", "cuda"))
+m3_demo(device = c("auto", "cpu", "cuda"), n_cells = NULL)
 ```
 
 Load the built-in **Liu et al.** COVID-19 demo — the same stratified subsample
 (RNA HVGs + ADT, 3 batches `B1`/`B2`/`B3`) the Python package ships, so demo
 results match exactly.
+
+`n_cells` loads a smaller, fixed subsample of that many cells (2,250 to 21,489)
+for a quicker run, e.g. `m3_demo(n_cells = 6000)`; `NULL` loads all 30,534. It
+returns the same cells as Python's `liu_demo(n_cells=)`: equal numbers from each
+batch, with every cell type of every batch keeping at least 50 cells (or all it
+has). Use the full demo for donor-level prediction and attribution.
 
 **Returns:** an `m3_dataset`.
 
