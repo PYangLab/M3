@@ -117,7 +117,7 @@ kept); a batch missing a whole modality is zero-filled and flagged in
 ### `m3.datasets.liu_demo`
 
 ```python
-m3.datasets.liu_demo() -> Dataset
+m3.datasets.liu_demo(n_cells: int | None = None) -> Dataset
 ```
 
 Load the built-in **Liu et al.** COVID-19 demo — a **~30 k-cell**
@@ -133,6 +133,20 @@ Dataset(n_cells=30534, batches=['B1', 'B2', 'B3'], modalities=[rna:1000, adt:192
 
 `obs` carries the columns `batch` (`B1` / `B2` / `B3`), `sample_id`, `Donor`,
 `cond_group` (`HC` / `Severe`), `Age_interval`, and `mergedcelltype`.
+
+Pass `n_cells` (2,250 to 21,489) to load a smaller, fixed subsample instead of
+all 30,534 cells. Training time is proportional to the number of cells, so this
+is the quickest way to try cell-level integration on a CPU:
+
+```python
+>>> m3.datasets.liu_demo(n_cells=6000)
+Dataset(n_cells=6000, batches=['B1', 'B2', 'B3'], modalities=[rna:1000, adt:192])
+```
+
+The same cells are returned on every call. Each batch contributes equally, and
+every cell type of every batch keeps at least 50 cells (or all it has), so no
+cell type is lost. Donor-level prediction and attribution need enough cells per
+donor, so use the full demo there.
 
 ---
 

@@ -73,3 +73,12 @@ test_that("held_out_samples: hold out donors across batches", {
   preds <- m3_predict_donors(m)
   expect_setequal(as.character(preds$sample_id), as.character(held))   # query == the held-out donors
 })
+
+test_that("m3_demo(n_cells=) loads a smaller demo with equal cells per batch", {
+  skip_if_no_engine()
+  on.exit(m3_shutdown(), add = TRUE)
+  d <- m3_demo(n_cells = 3000, device = "cpu")     # a plain R number, not 3000L
+  expect_equal(d$info$n_cells, 3000L)
+  expect_equal(as.vector(table(m3_dataset_obs(d)$batch)), c(1000L, 1000L, 1000L))
+  expect_error(m3_demo(n_cells = 300, device = "cpu"), "n_cells must be between")
+})

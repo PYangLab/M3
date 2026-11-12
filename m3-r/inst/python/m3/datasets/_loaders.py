@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import operator
 import warnings
 from importlib import resources
 
@@ -20,12 +21,89 @@ _FT_TO_MODALITY = {
 }
 
 
-def liu_demo() -> Dataset:
+# Fewest cells liu_demo(n_cells=...) keeps per (batch, cell type), so that a rare
+# type is still a visible group in a small subsample rather than a few points.
+_MIN_CELLS_PER_TYPE = 50
+
+
+def _subsample_rows(obs: pd.DataFrame, n_cells) -> np.ndarray:
+    """Row positions of a deterministic ``n_cells`` subsample of the demo.
+
+    Every batch contributes the same number of cells: m3 trains on a
+    batch-balanced subset by default, so cells beyond the smallest batch's share
+    would be loaded and then left out of training. Within a batch each cell type
+    first gets ``_MIN_CELLS_PER_TYPE`` cells (or all it has), and the rest of the
+    batch's share is split in proportion to what each type has left.
+
+    Cells are taken at even spacing through each (batch, cell type) group instead
+    of with a random generator. The file's order within a group is already mixed
+    across samples, and even spacing gives the same cells on every numpy version,
+    which keeps the R and Python demos identical.
+    """
+    if isinstance(n_cells, bool):
+        raise TypeError(f"n_cells must be an integer, got {n_cells!r}.")
+    try:
+        n = operator.index(n_cells)
+    except TypeError:
+        raise TypeError(f"n_cells must be an integer, got {n_cells!r}.") from None
+
+    batch = obs["batch"].astype(str).to_numpy()
+    celltype = obs["mergedcelltype"].astype(str).to_numpy()
+    groups = {
+        b: [np.flatnonzero((batch == b) & (celltype == t))
+            for t in sorted(set(celltype[batch == b]))]
+        for b in sorted(set(batch))
+    }
+    minimum = {b: sum(min(len(g), _MIN_CELLS_PER_TYPE) for g in gs) for b, gs in groups.items()}
+    available = {b: sum(len(g) for g in gs) for b, gs in groups.items()}
+    lowest = len(groups) * max(minimum.values())
+    highest = len(groups) * min(available.values())
+    if not lowest <= n <= highest:
+        raise ValueError(
+            f"n_cells must be between {lowest} and {highest} for this demo, got {n}. "
+            f"It takes the same number of cells from each of the {len(groups)} batches, "
+            f"and the smallest batch has {min(available.values())}. Omit n_cells to "
+            f"load all {len(obs)} cells."
+        )
+
+    share, extra = divmod(n, len(groups))
+    rows = []
+    for i, gs in enumerate(groups.values()):
+        size = np.array([len(g) for g in gs])
+        take = np.minimum(size, _MIN_CELLS_PER_TYPE)
+        spare = size - take
+        rest = share + (i < extra) - take.sum()
+        if rest:
+            # Largest-remainder split of `rest` in proportion to `spare`, in whole
+            # cells, so the batch lands on exactly its share.
+            take = take + rest * spare // spare.sum()
+            remainder = rest * spare % spare.sum()
+            short = share + (i < extra) - take.sum()
+            take[np.argsort(-remainder, kind="stable")[:short]] += 1
+        for g, k in zip(gs, take):
+            rows.append(g[(2 * np.arange(k) + 1) * len(g) // (2 * k)])
+    return np.sort(np.concatenate(rows))
+
+
+def liu_demo(n_cells: int | None = None) -> Dataset:
     """Load the Liu et al. CITE-seq demo subsample (~30k cells, 3 batches).
 
     A ~30k-cell (30,534) stratified subsample of the full dataset (~135k cells)
     used in the publication, balanced by batch x condition x cell type so every
     annotated cell type survives. QC labels (Unk / dblt / dim) are pre-filtered.
+
+    Parameters
+    ----------
+    n_cells
+        Load a smaller, fixed subsample of this many cells instead of all of
+        them, for a quicker run: training time is proportional to the number of
+        cells. The same cells are returned on every call. Each batch contributes
+        equally, and every cell type of every batch keeps at least 50 cells (or
+        all it has), so no cell type is lost. Must be between 2,250 and 21,489.
+        ``None`` (the default) loads all 30,534 cells.
+
+        This is meant for cell-level integration. Donor-level prediction and
+        attribution need enough cells per donor, so use the full demo there.
 
     Returns
     -------
@@ -105,4 +183,9 @@ def liu_demo() -> Dataset:
         obs = obs.rename(columns={"cohort": "batch"})
     if "batch" not in obs.columns:
         raise ValueError("liu_demo.h5ad obs has no batch/Batch column.")
+    if n_cells is not None:
+        rows = _subsample_rows(obs, n_cells)
+        modalities = {m: x[rows] for m, x in modalities.items()}
+        present = {m: p[rows] for m, p in present.items()}
+        obs = obs.iloc[rows].reset_index(drop=True)
     return Dataset(modalities=modalities, obs=obs, var=var, present=present)
