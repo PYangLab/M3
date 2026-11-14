@@ -194,12 +194,17 @@ def model_train(dataset_handle, *, condition_keys, target_condition=None,
             donor_predictor=(dict(donor_predictor) if donor_predictor else None),
             seed=(None if seed is None else int(seed)),
         )
+    return _model_meta(model)
+
+
+def _model_meta(model) -> dict:
+    """Register a live model and describe it for the R-side ``m3_model`` object."""
     h = _put(model)
     return {
         "handle": int(h),
         "capabilities": {k: bool(v) for k, v in model.capabilities.items()},
-        "modalities": [str(m) for m in ds.modality_names],
-        "embedding_dim": int(embedding_dim),
+        "modalities": [str(m) for m in model.dataset.modality_names],
+        "embedding_dim": int(model.embedding_dim),
         "condition_keys": [str(c) for c in model.condition_keys],
         "target_condition": str(model.target_condition),
         "celltype_key": (None if model.celltype_key is None else str(model.celltype_key)),
@@ -209,6 +214,20 @@ def model_train(dataset_handle, *, condition_keys, target_condition=None,
         "reference_vocab": {k: [str(x) for x in v]
                             for k, v in model.contract["reference_vocab"].items()},
     }
+
+
+def model_save(h, path) -> str:
+    """Write the model behind handle ``h`` to ``path`` (see m3.M3.save)."""
+    return _get(h).save(os.path.expanduser(str(path)))
+
+
+def model_load(path, dataset_handle) -> dict:
+    """Read a saved model back onto its dataset; store it, return handle+meta."""
+    return _model_meta(m3.M3.load(os.path.expanduser(str(path)), _get(dataset_handle)))
+
+
+def demo_model(name) -> str:
+    return m3.datasets.liu_demo_model(str(name))
 
 
 def model_capabilities(h) -> dict:
