@@ -13,8 +13,14 @@ Capabilities:
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
+import json
+import os
 import shutil
 import tempfile
+import threading
+import uuid
 import warnings
 
 import numpy as np
@@ -27,9 +33,43 @@ from m3 import _bridge
 
 _MODALITY_ORDER = ("rna", "adt", "atac")
 
+# obs column that carries each cell's Dataset row through the engine, so the rows
+# the read-outs describe (a batch-grouped, possibly subsampled and permuted set)
+# can be traced back to the Dataset. Removed again before train() returns.
+_ROW = "__m3_row__"
+
+# Bumped whenever the layout of a saved model file changes incompatibly.
+_FORMAT = "m3-model"
+_FORMAT_VERSION = 1
+
+
+_QUIET = threading.Lock()
+
+
+@contextlib.contextmanager
+def _quiet_engine():
+    """Silence the progress lines the engine's file loaders print.
+
+    Done by shadowing ``print`` inside the loaders' own module rather than by
+    redirecting ``sys.stdout``, so nothing the rest of the program prints -- from
+    this thread or another -- is lost. The lock keeps two threads from undoing
+    each other's shadowing.
+    """
+    from m3._engine import util
+    with _QUIET:
+        util.print = lambda *args, **kwargs: None
+        try:
+            yield
+        finally:
+            del util.print
+
 
 class M3CapabilityError(RuntimeError):
     """Raised when a readout needs a capability the model has not been trained for."""
+
+
+class _NotAModel(Exception):
+    """Internal: why a file cannot be a model that save() wrote."""
 
 
 class M3:
@@ -154,9 +194,13 @@ class M3:
 
         self._generator = None
         self._corrector = None
+        self._dp = None
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._all_data = self._all_b = self._all_mask_poe = None
         self._all_metadata = None
+        self._all_rows = None
+        self._hvg_cols = {}
+        self._trained_on = None
         self._n_ref = 0
         self._n_conditions = len(self.condition_keys)
         self.history = None
@@ -212,21 +256,13 @@ class M3:
         if want_donor and not self.donor_key:
             raise ValueError("donor prediction / attribution needs donor_key + celltype_key.")
 
-        ds = self.dataset
-        if self._query_cells.any() and any(
-                ds.obs.loc[self._query_cells, k].isna().any() for k in self.condition_keys):
-            # Held-out cells' condition labels are masked in training anyway; fill
-            # any NaN with a reference placeholder so the engine sees a valid
-            # category (no requirement to supply query labels).
-            import dataclasses
-            patched = ds.obs.copy()
-            for k in self.condition_keys:
-                ph = self.contract["reference_vocab"][k][0]
-                col = patched[k].astype(object)
-                col[self._query_cells & patched[k].isna().to_numpy()] = ph
-                patched[k] = col
-            ds = dataclasses.replace(ds, obs=patched)
-        marshalled = _bridge.marshal(ds)
+        # Start from a clean slate, so nothing of an earlier train() (a donor
+        # predictor this run may not fit, say) outlives it.
+        self._generator = self._corrector = self._dp = self.history = None
+        self.capabilities = dict.fromkeys(self.capabilities, False)
+        self._hvg_cols = {}
+        self._trained_on = self._fingerprint()
+        marshalled = _bridge.marshal(self._engine_dataset())
         mp = marshalled["modality_paths"]
         batches = marshalled["batches"]
         save_path = tempfile.mkdtemp(prefix="m3_train_")
@@ -304,6 +340,7 @@ class M3:
             self._all_data, self._all_b, self._all_mask_poe = ref_data, ref_b, ref_mask_poe
             self._all_metadata = ref_metadata.reset_index(drop=True)
 
+        self._all_rows = self._all_metadata.pop(_ROW).to_numpy(dtype=np.int64)
         self._all_data = self._all_data.to(self._device)
         self._all_b = self._all_b.to(self._device).long()
         self._all_mask_poe = self._all_mask_poe.to(self._device)
@@ -318,22 +355,89 @@ class M3:
             self.capabilities["predict_donors"] = True
         return self
 
+    # ------------------------------------------------- engine-side data
+    def _engine_dataset(self):
+        """The Dataset as it is handed to the engine: held-out cells' missing
+        condition labels filled in, and every cell tagged with its row."""
+        import dataclasses
+        obs = self.dataset.obs
+        if _ROW in obs.columns:
+            raise ValueError(f"obs column '{_ROW}' is reserved by m3; rename it.")
+        if self._query_cells.any() and any(
+                obs.loc[self._query_cells, k].isna().any() for k in self.condition_keys):
+            # Held-out cells' condition labels are masked in training anyway; fill
+            # any NaN with a reference placeholder so the engine sees a valid
+            # category (no requirement to supply query labels).
+            obs = obs.copy()
+            for k in self.condition_keys:
+                ph = self.contract["reference_vocab"][k][0]
+                col = obs[k].astype(object)
+                col[self._query_cells & obs[k].isna().to_numpy()] = ph
+                obs[k] = col
+        return dataclasses.replace(
+            self.dataset, obs=obs.assign(**{_ROW: np.arange(obs.shape[0])}))
+
+    def _assemble(self, rows, n_ref: int):
+        """Rebuild the read-out tensors and metadata for Dataset rows ``rows``
+        (the first ``n_ref`` are the reference set, the rest the held-out query).
+
+        train() gets these from the engine run; a loaded model has no run to take
+        them from, so this repeats the engine's own steps -- same file round trip,
+        same loaders, same per-set normalisation -- on the rows the saved model
+        was read out on. save() checks that it reproduces the trained model's
+        tensors exactly before it writes anything.
+        """
+        from m3._engine import util as U
+
+        marshalled = _bridge.marshal(self._engine_dataset())
+        try:
+            mp = marshalled["modality_paths"]
+            with _quiet_engine():
+                label, batch = U.load_and_merge_metadata(marshalled["metadata_paths"])
+                counts = list(U.fill_and_concat_available_lists(
+                    *[U.load_if_available(mp[m]) for m in _MODALITY_ORDER]))
+        finally:
+            shutil.rmtree(marshalled["tmpdir"], ignore_errors=True)
+        for slot, m in enumerate(_MODALITY_ORDER):
+            if m in self._hvg_cols and counts[slot] is not None:
+                counts[slot] = counts[slot][:, torch.as_tensor(self._hvg_cols[m])]
+
+        # engine order (batch after batch) -> position of each requested row
+        pos = np.empty(len(label), dtype=np.int64)
+        pos[label[_ROW].to_numpy()] = np.arange(len(label))
+        sel = pos[np.asarray(rows, dtype=np.int64)]
+        dev = self._device
+
+        def block(idx):
+            idx = torch.as_tensor(idx)
+            mask_poe, mask_recon, data = [], [], []
+            for c in counts:
+                if c is not None:
+                    mask_poe, mask_recon, data, mask_batch = U.process_ref_count(
+                        c[idx], dev, mask_poe, mask_recon, data)
+            data = [torch.nan_to_num(d, nan=0.0) for d in data]
+            codes = pd.Categorical(batch[idx].cpu().numpy()).codes
+            return (torch.cat(data, dim=1),
+                    torch.cat(mask_poe + [mask_batch[:, 1].unsqueeze(1).to(dev)], dim=1),
+                    torch.tensor(codes, dtype=torch.long))
+
+        data, mask, b = block(sel[:n_ref])
+        if n_ref < len(sel):
+            q_data, q_mask, q_b = block(sel[n_ref:])
+            q_b = q_b + max(b) + 1
+            data = torch.cat([data, q_data], dim=0)
+            mask = torch.cat([mask, q_mask], dim=0)
+            b = torch.cat([b.reshape(-1), q_b.reshape(-1)], dim=0)
+        metadata = label.iloc[sel].reset_index(drop=True).drop(columns=_ROW)
+        return data.to(dev), b.to(dev).long(), mask.to(dev), metadata
+
     # ---------------------------------------------- Stage-2 donor predictor
-    def _fit_donor_predictor(self, cfg: dict):
-        """Stage-2 donor predictor: joint co-adaptation of encoder + corrector."""
-        from m3._engine import patient_prediction as pp
-        from m3._engine.util import setup_seed
+    def _donor_setup(self, min_cells: int):
+        """Donor, cell-type, condition and batch codes of the read-out rows.
 
-        enc_lr = cfg.get("enc_lr", 1e-5)
-        glr = cfg.get("glr", 5e-3)
-        n_epochs = cfg.get("n_epochs", 30)
-        patient_w = cfg.get("patient_w", 3.0)
-        adv_max = cfg.get("adv_max", 1.0)
-        adv_warmup = cfg.get("adv_warmup", 10)
-        n_disc = cfg.get("n_disc", 1)
-        hidden = cfg.get("hidden", 64)
-        min_cells = cfg.get("min_cells", 5)
-
+        Everything here follows from the rows' metadata, so it is rebuilt -- not
+        stored -- when a model is loaded.
+        """
         dev = self._device
         gen = self._generator
         ci = self._ci
@@ -362,36 +466,75 @@ class M3:
         ref_meta = meta.iloc[:n_ref]
         ref_cond_cat = pd.Categorical(ref_meta[self.target_condition].astype(str))
         condition_vocab = [str(c) for c in ref_cond_cat.categories]
-        n_cond_classes = len(condition_vocab)
         code_of = {v: i for i, v in enumerate(condition_vocab)}
         cond_codes = torch.tensor(
             [code_of.get(s, -1) for s in meta[self.target_condition].astype(str)],
             dtype=torch.long).to(dev)
 
         site_cat = pd.Categorical(meta[self.site_col].astype(str))
-        n_site = len(site_cat.categories)
         site_codes_cell = torch.tensor(site_cat.codes.astype("int64").copy()).to(dev)
         is_ref = torch.zeros(n_total, dtype=torch.bool, device=dev)
         is_ref[:n_ref] = True
 
-        unique_donors0 = torch.unique(donor_codes)
         donor_status, donor_site, donor_is_ref = {}, {}, {}
-        for dc in unique_donors0.tolist():
+        for dc in torch.unique(donor_codes).tolist():
             m = (donor_codes == dc)
             donor_status[dc] = int(cond_codes[m][0])
             donor_site[dc] = int(site_codes_cell[m][0])
             donor_is_ref[dc] = bool(is_ref[m][0])
 
-        def agg_diff(z):
-            uds = torch.unique(donor_codes)
-            rows = []
-            for dc in uds:
-                parts = [z[(donor_codes == dc) & (celltype_codes == k)].mean(0)
-                         if int(((donor_codes == dc) & (celltype_codes == k)).sum()) >= min_cells
-                         else z.new_zeros(emb_dim)
-                         for k in range(n_celltypes)]
-                rows.append(torch.cat(parts))
-            return torch.stack(rows), uds
+        self._dp = {
+            "donor_cat": donor_cat, "condition_vocab": condition_vocab,
+            "donor_codes": donor_codes, "celltype_codes": celltype_codes,
+            "cond_codes": cond_codes,
+            "donor_is_ref": donor_is_ref, "donor_status": donor_status,
+            "donor_site": donor_site, "n_site": len(site_cat.categories),
+            "n_celltypes": n_celltypes, "min_cells": min_cells,
+        }
+
+    def _agg_diff(self, z):
+        """Per-donor feature: the mean latent of each cell type, side by side (zeros
+        for a cell type the donor has fewer than ``min_cells`` cells of)."""
+        dp = self._dp
+        donor_codes, celltype_codes = dp["donor_codes"], dp["celltype_codes"]
+        uds = torch.unique(donor_codes)
+        rows = []
+        for dc in uds:
+            parts = [z[(donor_codes == dc) & (celltype_codes == k)].mean(0)
+                     if int(((donor_codes == dc) & (celltype_codes == k)).sum()) >= dp["min_cells"]
+                     else z.new_zeros(self._emb_dim)
+                     for k in range(dp["n_celltypes"])]
+            rows.append(torch.cat(parts))
+        return torch.stack(rows), uds
+
+    def _fit_donor_predictor(self, cfg: dict):
+        """Stage-2 donor predictor: joint co-adaptation of encoder + corrector."""
+        from m3._engine import patient_prediction as pp
+        from m3._engine.util import setup_seed
+
+        enc_lr = cfg.get("enc_lr", 1e-5)
+        glr = cfg.get("glr", 5e-3)
+        n_epochs = cfg.get("n_epochs", 30)
+        patient_w = cfg.get("patient_w", 3.0)
+        adv_max = cfg.get("adv_max", 1.0)
+        adv_warmup = cfg.get("adv_warmup", 10)
+        n_disc = cfg.get("n_disc", 1)
+        hidden = cfg.get("hidden", 64)
+        min_cells = cfg.get("min_cells", 5)
+
+        self._donor_setup(min_cells)
+        dev = self._device
+        gen = self._generator
+        ci = self._ci
+        n_ref = self._n_ref
+        emb_dim = self._emb_dim
+        dp = self._dp
+        n_celltypes, n_site = dp["n_celltypes"], dp["n_site"]
+        n_cond_classes = len(dp["condition_vocab"])
+        cond_codes = dp["cond_codes"]
+        donor_status, donor_site, donor_is_ref = (
+            dp["donor_status"], dp["donor_site"], dp["donor_is_ref"])
+        agg_diff = self._agg_diff
 
         setup_seed(0)
         corrector = pp.AdvSampleCorrector(dim=n_celltypes * emb_dim, n_con=n_cond_classes,
@@ -443,17 +586,12 @@ class M3:
             opt_enc.step()
             opt_cell.step()
             opt_gen.step()
-            hist.append({"epoch": epoch, "cell_loss": float(cell_loss),
-                         "status_loss": float(status_loss), "adv_w": float(adv_w)})
+            hist.append({"epoch": epoch, "cell_loss": float(cell_loss.detach()),
+                         "status_loss": float(status_loss.detach()), "adv_w": float(adv_w)})
 
         self._corrector = corrector
         self.history = hist
-        self._dp = {
-            "donor_cat": donor_cat, "condition_vocab": condition_vocab,
-            "donor_codes": donor_codes, "celltype_codes": celltype_codes,
-            "donor_is_ref": donor_is_ref, "donor_status": donor_status,
-            "n_celltypes": n_celltypes, "agg_diff": agg_diff,
-        }
+        dp["hidden"] = hidden
 
     def _build_donor_features(self):
         gen, corr, ci = self._generator, self._corrector, self._ci
@@ -465,7 +603,7 @@ class M3:
             mu = go[8]
             z = torch.cat([mu[:, :intrinsic], mu[:, intrinsic + 2 * ci: intrinsic + 2 * ci + 2]], 1)
             z = torch.where(torch.isnan(z) | torch.isinf(z), torch.zeros_like(z), z)
-            donor_feat, uds = self._dp["agg_diff"](z)
+            donor_feat, uds = self._agg_diff(z)
             donor_corr = corr.correct(donor_feat)
             logits = corr.status_head(donor_corr)
         return donor_corr, logits, uds
@@ -579,6 +717,8 @@ class M3:
         hvg_n = self.hvg.get(mod)
         if not hvg_n or w == len(full):
             return list(range(w))
+        if mod in self._hvg_cols:        # recorded by save() / restored by load()
+            return list(self._hvg_cols[mod])
         from m3._engine.util import process_highly_variable_genes
         mat = self.dataset.modalities[mod]                    # raw counts, all cells
         dense = torch.as_tensor(np.asarray(mat.todense()), dtype=torch.float32)
@@ -750,6 +890,427 @@ class M3:
             expr[m] = arr[:, start: start + w]
             start += w
         return {"expression": expr, "obs": meta}
+
+    # ---------------------------------------------------------- save / load
+    def _fingerprint(self) -> dict:
+        """Digest of everything in the Dataset that the model's numbers depend on:
+        the counts, the feature names, which batches measure which modality, and
+        the obs columns given a role. Keyed by a readable name of each part, so a
+        mismatch can say which part differs. Other obs columns are free to change.
+        """
+        import scipy.sparse as sp
+
+        ds = self.dataset
+
+        def digest(*chunks) -> str:
+            h = hashlib.sha256()
+            for c in chunks:
+                h.update(c)
+            return h.hexdigest()
+
+        def text(values) -> bytes:
+            # A JSON list keeps the values apart whatever characters they hold, and
+            # null keeps a missing label apart from the text "nan" or "None".
+            # The type goes in too: 1 and "1" are different labels to the engine.
+            return json.dumps([None if (pd.api.types.is_scalar(v) and pd.isna(v))
+                               else f"{type(v).__name__}:{v}" for v in values]).encode("ascii")
+
+        batch = ds.obs["batch"].to_numpy()
+        fp = {"number of cells": str(ds.n_cells)}
+        for m in ds.modality_names:
+            mat = sp.csr_matrix(ds.modalities[m], dtype=np.float32, copy=True)
+            mat.sum_duplicates()
+            mat.eliminate_zeros()
+            mat.sort_indices()
+            fp[f"counts of '{m}'"] = digest(
+                np.asarray(mat.shape, dtype="<i8").tobytes(), mat.indptr.astype("<i8").tobytes(),
+                mat.indices.astype("<i8").tobytes(), mat.data.astype("<f4").tobytes())
+            fp[f"feature names of '{m}'"] = digest(text(ds.var[m]))
+            fp[f"batches measuring '{m}'"] = digest(text(
+                bool(ds.present[m][batch == c].any()) for c in ds.batches))
+        roles = dict.fromkeys(
+            [*self.condition_keys, self.donor_key, self.celltype_key, self.batch_key])
+        for col in roles:
+            if col is not None:
+                fp[f"obs column '{col}'"] = (digest(text(ds.obs[col].tolist()))
+                                             if col in ds.obs.columns else "missing")
+        return fp
+
+    @staticmethod
+    def _fingerprint_diff(a: dict, b: dict) -> list:
+        return [k for k in dict.fromkeys([*a, *b]) if a.get(k) != b.get(k)]
+
+    # Outputs recorded in a saved file and recomputed when it is loaded: entry name
+    # -> (what a message calls it, tolerance, relative and absolute). On the machine
+    # that saved the file they come back identical; on another machine or torch
+    # build they differ by float32 rounding (~1e-5), so the tolerances leave two
+    # orders of magnitude and still catch a model that computes something else.
+    _CHECKS = {
+        "probe_inputs": ("model inputs", 1e-5),
+        "probe_embedding": ("embedding", 1e-3),
+        "probe_embedding_cells": ("embedding", 1e-3),
+        "probe_reconstruction_cells": ("reconstruction", 1e-3),
+        "probe_reconstruction_features": ("reconstruction", 1e-3),
+        "probe_donor_embedding": ("donor embedding", 1e-2),
+        "probe_logits": ("donor predictions", 1e-2),
+    }
+
+    def _probes(self) -> dict:
+        """The outputs save() records and load() recomputes and compares.
+
+        Every cell contributes (its input total, the mean of its embedding and of
+        its reconstruction), 256 evenly spaced cells contribute their whole
+        embedding, and every donor its corrected vector's mean and its logits.
+        Between them they pass through every weight a read-out uses: encoder and
+        batch encoder, decoder, corrector and status head.
+        """
+        n = self._all_data.shape[0]
+        sample = np.unique(np.linspace(0, n - 1, num=min(n, 256)).round().astype(np.int64))
+        mu = self._forward_mu()[0]
+        per_cell, per_feature = [], 0.0
+        with torch.no_grad():
+            for start in range(0, n, 4096):              # bounded memory on large data
+                recon = self._generator.decoder(mu[start:start + 4096])
+                per_cell.append(recon.mean(1))
+                per_feature = per_feature + recon.double().sum(0)
+        out = {"probe_inputs": self._all_data.double().sum(1),
+               "probe_embedding": mu[torch.as_tensor(sample)],
+               "probe_embedding_cells": mu.mean(1),
+               "probe_reconstruction_cells": torch.cat(per_cell),
+               "probe_reconstruction_features": per_feature / n}
+        if self._corrector is not None:
+            donor_corr, logits, _ = self._build_donor_features()
+            out["probe_donor_embedding"] = donor_corr.mean(1)
+            out["probe_logits"] = logits
+        return {k: v.detach().cpu().numpy() for k, v in out.items()}
+
+    def save(self, path) -> str:
+        """Write the trained model to ``path``, to be read back with :meth:`load`.
+
+        The file holds the trained weights and the model's settings -- not the
+        data. It also records which cells the read-outs cover and a digest of the
+        dataset, so that :meth:`load` can rebuild the model from the same Dataset
+        and refuse any other. It is a plain zip of arrays (no pickled objects).
+
+        Returns ``path``.
+        """
+        if self._generator is None:
+            raise M3CapabilityError("save requires a trained model; call train() first.")
+        path = os.fsdecode(path)
+        gen, corr = self._generator, self._corrector
+
+        def plain(value, where):
+            if isinstance(value, np.generic):
+                value = value.item()
+            if not isinstance(value, (str, int, float, bool)):
+                raise TypeError(
+                    f"cannot save this model: {where} contains a {type(value).__name__} "
+                    f"({value!r}), and a model file can only hold text and number labels "
+                    "there. Use text labels in that obs column.")
+            return value
+
+        held_out = [plain(v, "held_out") for v in self.held_out]
+        held_out_samples = [plain(v, "held_out_samples") for v in self.held_out_samples]
+
+        try:
+            self.dataset.__post_init__()     # its parts still fit together
+            fingerprint = self._fingerprint()
+            changed = self._fingerprint_diff(self._trained_on, fingerprint)
+            if changed:
+                raise ValueError(f"{', '.join(changed)} differ")
+        except Exception as e:
+            raise ValueError(
+                f"the Dataset has changed since this model was trained ({e}), so a saved "
+                "copy could not be loaded back; nothing was written. Save before editing "
+                "the Dataset.") from e
+
+        # The cells training held out must be the ones the settings ask for, or
+        # load() could not tell reference from query.
+        asked = self._query_cells
+        got = asked[self._all_rows]
+        if (got[:self._n_ref].any() or not got[self._n_ref:].all()
+                or int(got.sum()) != int(asked.sum())):
+            raise ValueError(
+                f"this model's held-out set is not the one its settings ask for: held_out / "
+                f"held_out_samples name {int(asked.sum())} cells, training held out "
+                f"{len(got) - self._n_ref}. Labels that read as numbers (such as '001') "
+                "lose their text form in training and then match nothing; rename them and "
+                "train again. Nothing was written.")
+
+        # Record which original columns in-model HVG selection kept, so that load()
+        # does not depend on re-running the selection.
+        present = [m for m in _MODALITY_ORDER if m in self.dataset.modality_names]
+        for mod, w in zip(present, gen.encoder.feature_splits):
+            full = list(self.dataset.var[mod])
+            if self.hvg.get(mod) and w != len(full):
+                self._hvg_cols[mod] = [int(i) for i in self._hvg_index(mod, w, full)]
+
+        # load() rebuilds the read-out tensors from the Dataset. Do that here first
+        # and compare with the trained model's own: a model that cannot be rebuilt
+        # exactly is not written at all.
+        data, b, mask, metadata = self._assemble(self._all_rows, self._n_ref)
+        roles = list(dict.fromkeys(c for c in (
+            *self.condition_keys, self.donor_key, self.celltype_key, self.batch_key, "batch")
+            if c is not None))
+        if not all(c in self._all_metadata.columns for c in roles) or not (
+                metadata[roles].equals(self._all_metadata[roles])):
+            raise ValueError(
+                "model.cell_metadata has been edited (it is the model's own table, not a "
+                f"copy): its columns {roles} no longer match the Dataset, so a saved copy "
+                "would not load back to the same model; nothing was written. Work on "
+                "model.cell_metadata.copy() instead.")
+        if not (torch.equal(data, self._all_data) and torch.equal(b, self._all_b)
+                and torch.equal(mask, self._all_mask_poe)):
+            raise RuntimeError(
+                "m3 could not rebuild this model's inputs from its Dataset, so a saved "
+                "copy would not load back to the same model; nothing was written. "
+                "Please report this at https://github.com/PYangLab/M3/issues.")
+
+        import m3
+        header = {
+            "format": _FORMAT,
+            "format_version": _FORMAT_VERSION,
+            "m3_version": m3.__version__,
+            "init": {
+                "condition_keys": self.condition_keys,
+                "target_condition": self.target_condition,
+                "donor_key": self.donor_key,
+                "celltype_key": self.celltype_key,
+                "batch_key": self.batch_key,
+                "held_out": held_out,
+                "held_out_samples": held_out_samples,
+                "hvg": self.hvg,
+                "embedding_dim": self.embedding_dim,
+            },
+            # Layer widths that do not follow from the settings and the data; the
+            # rest are taken from those (and from the stored arrays) on load.
+            "generator": {
+                "nfeatures": list(gen.encoder.feature_splits),
+                "batch_classify_dim": gen.batch_classify_dim,
+                "condition_dim": list(gen.condition_dim),
+            },
+            "donor_predictor": None if corr is None else {"min_cells": self._dp["min_cells"]},
+            "n_ref": self._n_ref,
+            "hvg_cols": self._hvg_cols,
+            "history": self.history,
+            "dataset": fingerprint,
+        }
+        arrays = {"rows": self._all_rows, **self._probes()}
+        for k, v in gen.state_dict().items():
+            arrays[f"generator/{k}"] = v.detach().cpu().numpy()
+        if corr is not None:
+            for k, v in corr.state_dict().items():
+                arrays[f"corrector/{k}"] = v.detach().cpu().numpy()
+
+        def number(o):                       # numpy scalars in settings / history
+            if isinstance(o, np.generic):
+                return o.item()
+            raise TypeError(f"cannot save a value of type {type(o).__name__} in the model file")
+
+        arrays["header"] = np.array(json.dumps(header, default=number))
+        # Write beside the target under a name of its own and rename, so neither an
+        # interrupted save nor two saves at once leave a half-written file under
+        # the real name.
+        tmp = f"{path}.{uuid.uuid4().hex[:12]}.tmp"
+        try:
+            with open(tmp, "xb") as f:
+                np.savez_compressed(f, **arrays)
+            os.replace(tmp, path)
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        return path
+
+    @classmethod
+    def load(cls, path, dataset) -> "M3":
+        """Read a model written by :meth:`save`.
+
+        ``dataset`` must be the Dataset the model was trained on (the same cells in
+        the same order, the same counts, feature names and role columns): the file
+        holds the weights, and the read-outs are computed from the data. A
+        different dataset, a damaged file, or a file whose weights no longer give
+        the outputs recorded at save time is refused with a ``ValueError``.
+
+        The returned model gives the read-outs of the one that was saved
+        (``embedding``, ``reconstruct``, ``predict_donors``, ``donor_embedding``,
+        ``attribute``, ``generate``, ``augment``). ``generate`` and ``augment`` draw
+        random numbers on the model's device, so a GPU and a CPU give different
+        draws for the same seed.
+        """
+        import zipfile
+
+        from m3._dataset import Dataset
+
+        if isinstance(path, Dataset):
+            raise TypeError("load(path, dataset): the file path comes first, then the Dataset.")
+        path = os.fsdecode(path)
+        if not isinstance(dataset, Dataset):
+            raise TypeError(
+                f"load(path, dataset) needs the m3 Dataset the model was trained on, not "
+                f"a {type(dataset).__name__}; build it the way it was built before "
+                "training (m3.read_h5ad, m3.from_anndata, m3.read_matrix, ...).")
+        if _ROW in dataset.obs.columns:
+            raise ValueError(f"obs column '{_ROW}' is reserved by m3; rename it.")
+
+        def unreadable(why):
+            return ValueError(f"{path} is not a readable m3 model file ({why}).")
+
+        def reason(e):
+            if isinstance(e, _NotAModel):
+                return str(e)
+            if "pickle" in str(e).lower():
+                return "it holds pickled objects, which a model file never does"
+            return f"{type(e).__name__}: {e}"
+
+        dataset.__post_init__()              # its parts fit together (ValueError if not)
+        if not os.path.isfile(path):
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"no such file: {path}")
+            raise unreadable("it is not a file")
+        with open(path, "rb") as f:
+            starts_like_a_zip = f.read(4) == b"PK\x03\x04"
+        if not starts_like_a_zip or not zipfile.is_zipfile(path):
+            raise unreadable("it is not a zip archive")
+        try:
+            with np.load(path, allow_pickle=False) as z:
+                if "header" not in z.files:
+                    raise _NotAModel("no header")
+                header = json.loads(str(z["header"]))
+                if not isinstance(header, dict) or header.get("format") != _FORMAT:
+                    raise _NotAModel("no m3 model header")
+                version = header.get("format_version")
+                if type(version) is not int:
+                    raise _NotAModel("its format version is not a whole number")
+                extra = [k for k in z.files if k not in ("header", "rows", *cls._CHECKS)
+                         and not k.startswith(("generator/", "corrector/"))]
+                if extra:
+                    raise _NotAModel(f"unexpected entry '{extra[0]}'")
+                arrays = {k: z[k] for k in z.files if k != "header"}
+        except Exception as e:
+            raise unreadable(reason(e)) from e
+        if version != _FORMAT_VERSION:
+            import m3
+            raise ValueError(
+                f"{path} uses model file format version {version} (written by m3 "
+                f"{header.get('m3_version')}); this m3 ({m3.__version__}) reads format "
+                f"version {_FORMAT_VERSION}. Load it with the m3 version that wrote it.")
+
+        try:
+            init = dict(header["init"])
+            saved_fp = header["dataset"]
+            if not isinstance(saved_fp, dict):
+                raise _NotAModel("no dataset digest")
+        except Exception as e:
+            raise unreadable(reason(e)) from e
+        wrong_dataset = ("Load it with the same Dataset that was passed to m3.M3(...) when "
+                         "the model was trained.")
+        try:
+            model = cls(dataset, **init)
+        except Warning:                      # warnings turned into errors by the caller
+            raise
+        except ValueError as e:              # the saved settings do not fit this dataset
+            raise ValueError(f"{path}: this is not the dataset this model was trained on "
+                             f"({e}) {wrong_dataset}") from e
+        except Exception as e:
+            raise unreadable(reason(e)) from e
+        try:
+            model._trained_on = model._fingerprint()
+        except Exception as e:               # labels the digest cannot even read
+            raise ValueError(f"{path}: this is not the dataset this model was trained on "
+                             f"({type(e).__name__}: {e}). {wrong_dataset}") from e
+        differs = cls._fingerprint_diff(saved_fp, model._trained_on)
+        if differs:
+            raise ValueError(f"{path}: this is not the dataset this model was trained on "
+                             f"({', '.join(differs)} differ). {wrong_dataset}")
+
+        try:
+            model._restore(header, arrays)
+            recomputed = model._probes()
+            if set(recomputed) != {k for k in arrays if k in cls._CHECKS}:
+                raise _NotAModel("its recorded outputs are not those of this kind of model")
+        except Exception as e:      # missing, misshapen or inconsistent entries
+            raise unreadable(reason(e)) from e
+
+        # The weights are in; check that they give the numbers the saved model gave.
+        for key, value in recomputed.items():
+            what, tol = cls._CHECKS[key]
+            saved = arrays[key]
+            if saved.shape != value.shape or not np.allclose(
+                    value, saved, rtol=tol, atol=tol, equal_nan=True):
+                raise ValueError(
+                    f"{path}: the loaded model does not reproduce the {what} recorded when "
+                    f"it was saved (by m3 {header.get('m3_version')}), so it was not loaded. "
+                    "The file may be damaged, or this m3 and the libraries under it compute "
+                    "them differently from the ones that saved it.")
+        return model
+
+    def _restore(self, header: dict, arrays: dict) -> None:
+        """Put a saved model's trained state onto this (freshly constructed) model.
+
+        Shapes come from the settings, the data and the stored arrays themselves;
+        whatever the header adds is checked against those before anything is built.
+        """
+        from m3._engine.model import M3_model
+        from m3._engine.patient_prediction import AdvSampleCorrector
+
+        def whole(x):
+            if type(x) is not int:
+                raise _NotAModel("a recorded size is not a whole number")
+            return x
+
+        dev = self._device
+        n_ref = whole(header["n_ref"])
+        rows = arrays["rows"]
+        query = self._query_cells
+        if (rows.ndim != 1 or rows.dtype.kind not in "iu" or not 0 < n_ref <= len(rows)
+                or rows.min() < 0 or rows.max() >= len(query)
+                or len(np.unique(rows)) != len(rows)
+                or query[rows[:n_ref]].any() or not query[rows[n_ref:]].all()):
+            raise _NotAModel("the recorded cells do not fit the recorded settings")
+        rows = rows.astype(np.int64)
+        self._hvg_cols = {m: [whole(i) for i in v] for m, v in header["hvg_cols"].items()}
+        if not set(self._hvg_cols) <= {m for m in self.hvg if self.hvg[m]}:
+            raise _NotAModel("recorded feature selection without an hvg setting")
+        self._n_ref, self._all_rows = n_ref, rows
+        (self._all_data, self._all_b, self._all_mask_poe,
+         self._all_metadata) = self._assemble(rows, n_ref)
+
+        g = header["generator"]
+        nfeatures = [whole(v) for v in g["nfeatures"]]
+        condition_dim = [whole(v) for v in g["condition_dim"]]
+        if (min(nfeatures) < 1 or sum(nfeatures) != self._all_data.shape[1]
+                or whole(g["batch_classify_dim"]) != int(self._all_b.max()) + 1
+                or len(condition_dim) != len(self.condition_keys)
+                or not all(1 <= d <= len(query) for d in condition_dim)):
+            raise _NotAModel("the recorded network does not fit the settings and the data")
+
+        def state(prefix):
+            return {k[len(prefix):]: torch.from_numpy(v)
+                    for k, v in arrays.items() if k.startswith(prefix)}
+
+        gen_state, corr_state = state("generator/"), state("corrector/")
+        gen = M3_model(nfeatures, hidden_features=[self.embedding_dim] * len(nfeatures),
+                       z_dim=self.embedding_dim,
+                       cty_classify_dim=int(gen_state["cty1_classify.net.2.bias"].shape[0]),
+                       batch_classify_dim=g["batch_classify_dim"], condition_dim=condition_dim)
+        gen.load_state_dict(gen_state)
+        self._generator = gen.to(dev).eval()
+        self.history = header["history"]
+
+        cfg = header["donor_predictor"]
+        if (cfg is None) != (not corr_state):
+            raise _NotAModel("donor predictor settings and weights do not go together")
+        self.capabilities = {"embedding": True, "reconstruct": True,
+                             "predict_donors": cfg is not None}
+        if cfg is not None:
+            self._donor_setup(cfg["min_cells"])
+            dp = self._dp
+            dp["hidden"] = int(corr_state["transform.0.0.bias"].shape[0])
+            corr = AdvSampleCorrector(
+                dim=dp["n_celltypes"] * self._emb_dim, n_con=len(dp["condition_vocab"]),
+                n_batch=dp["n_site"], hidden=dp["hidden"], p=0.1, bn=False)
+            corr.load_state_dict(corr_state)
+            self._corrector = corr.to(dev).eval()
 
     @property
     def cell_metadata(self):

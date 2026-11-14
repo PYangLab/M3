@@ -148,6 +148,27 @@ every cell type of every batch keeps at least 50 cells (or all it has), so no
 cell type is lost. Donor-level prediction and attribution need enough cells per
 donor, so use the full demo there.
 
+### `m3.datasets.liu_demo_model`
+
+```python
+m3.datasets.liu_demo_model(name: str) -> str
+```
+
+Path of a model trained in advance on the full demo, shipped inside the wheel.
+Read it with [`M3.load`](#m3load) and the full demo data (not a
+`liu_demo(n_cells=...)` subsample) to go straight to the read-outs without
+training:
+
+```python
+>>> data = m3.datasets.liu_demo()
+>>> model = m3.M3.load(m3.datasets.liu_demo_model("patient_prediction"), data)
+```
+
+`name` is `"patient_prediction"` (batch `B3` held out, the model of the
+[patient prediction tutorial](notebooks/py_02_patient_prediction.ipynb)) or
+`"attribution"` (trained on all three batches, the model of the
+[feature attribution tutorial](notebooks/py_03_attribution.ipynb)).
+
 ---
 
 ## The `Dataset` container
@@ -244,6 +265,50 @@ available; otherwise CPU.
   Recognised keys (defaults): `enc_lr` (`1e-5`), `glr` (`5e-3`), `n_epochs`
   (`30`), `patient_w` (`3.0`), `adv_max` (`1.0`), `adv_warmup` (`10`), `n_disc`
   (`1`), `hidden` (`64`), `min_cells` (`5`).
+
+### `M3.save`
+
+```python
+M3.save(path) -> str
+```
+
+Write the trained model to `path`, to be read back with [`load`](#m3load).
+The file holds the trained weights and the model's settings, not the data, so it
+is small. It is a zip of arrays and contains no pickled objects. An existing file
+is replaced; the folder must exist. Returns `path`.
+
+```python
+model.train()
+model.save("model.m3")
+```
+
+### `M3.load`
+
+```python
+M3.load(path, dataset) -> M3    # classmethod
+```
+
+Read a model written by [`save`](#m3save), without training again. `dataset`
+must be the `Dataset` the model was trained on: the same cells in the same
+order, with the same counts, feature names and the `obs` columns named in
+`m3.M3(...)` (other `obs` columns may differ). `load` returns a new model, so no
+`m3.M3(...)` call is needed first. It gives the read-outs of the model that was
+saved: identical in the environment that saved it, and equal up to floating-point
+rounding in another. The exception is `generate` and `augment`, which draw random
+numbers: a GPU and a CPU give different draws for the same seed. Calling `train()`
+on it trains again from scratch.
+
+```python
+data  = m3.read_h5ad("my_data.h5ad")
+model = m3.M3.load("model.m3", data)
+emb   = model.embedding("bio")
+```
+
+`load` raises a `ValueError` instead of returning a model that could give
+different numbers: when `dataset` is not the one the model was trained on (the
+message names what differs), when the file is damaged or was not written by
+`save`, and when the loaded weights do not reproduce the outputs recorded in the
+file.
 
 ---
 
@@ -437,6 +502,8 @@ same engine, so a script translated line-for-line produces identical numbers.
 | `m3.from_anndata()` / `m3.read_matrix()` | `m3_dataset()` |
 | `m3.concat()` | `m3_concat()` |
 | `m3.M3(...).train()` | `m3_train(...)` |
+| `M3.save()` / `M3.load()` | `m3_save()` / `m3_load()` |
+| `m3.datasets.liu_demo_model()` | `m3_demo_model()` |
 | `M3.capabilities` | `m3_capabilities()` |
 | `M3.embedding()` | `m3_embedding()` |
 | `M3.cell_metadata` | `m3_cell_metadata()` |

@@ -232,7 +232,10 @@ def load_and_merge_metadata(metadata_path_list):
 
     for i, path in enumerate(metadata_path_list):
         if path is not None:
-            df = pd.read_csv(path, header=0, index_col=False)
+            # low_memory=False: type each column as a whole. Parsed in pieces (the default),
+            # a column mixing '1' and 'unassigned' comes back part int, part str, and where
+            # the pieces fall depends on how many other columns the table has.
+            df = pd.read_csv(path, header=0, index_col=False, low_memory=False)
             metadata_list.append(df)
             batch_vector.extend([i] * len(df))
 
@@ -342,7 +345,7 @@ def process_count_matrix(count, count_list, hvg_num):
             nonzero_mask = count_concat.sum(dim=1) != 0
             count_nonzero = count_concat[nonzero_mask]
             count_temp, hvg_mask = process_highly_variable_genes(count_nonzero, hvg_num)
-            count = count[:, hvg_mask]
+            count = count[:, np.asarray(hvg_mask)]  # a pandas Series: pandas 3 no longer indexes it by position
             return count
     else:
         return None

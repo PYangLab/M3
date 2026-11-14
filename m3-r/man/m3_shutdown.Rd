@@ -12,8 +12,9 @@ invisible \code{NULL}.
 \description{
 Releases the basilisk process (basilisk backend) and every live model held in
 it. The next \code{\link{m3_train}} starts fresh. Trained models are
-session-bound (a live torch object cannot persist across R sessions);
-re-train to continue.
+session-bound (a live torch object cannot persist across R sessions): write
+one to a file with \code{\link{m3_save}} first and read it back with
+\code{\link{m3_load}}, or re-train.
 }
 \examples{
 \donttest{ m3_shutdown() }

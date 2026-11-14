@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import operator
+import os
 import warnings
 from importlib import resources
 
@@ -189,3 +190,47 @@ def liu_demo(n_cells: int | None = None) -> Dataset:
         present = {m: p[rows] for m, p in present.items()}
         obs = obs.iloc[rows].reset_index(drop=True)
     return Dataset(modalities=modalities, obs=obs, var=var, present=present)
+
+
+# Models trained in advance on the full demo, one per tutorial that trains on it.
+_DEMO_MODELS = {
+    "attribution": "liu_demo_attribution.m3",
+    "patient_prediction": "liu_demo_patient_prediction.m3",
+}
+
+
+def liu_demo_model(name: str) -> str:
+    """Path of a model trained in advance on the full :func:`liu_demo` data.
+
+    Training on the full demo takes a while; these files let you go straight to
+    the read-outs. Each was written by ``model.save(...)`` at the end of the
+    tutorial of the same name and is read back with :meth:`m3.M3.load`, together
+    with the full demo data.
+
+    Parameters
+    ----------
+    name
+        ``"patient_prediction"`` (batch ``B3`` held out, as in the donor-level
+        prediction tutorial) or ``"attribution"`` (trained on all three batches,
+        as in the feature attribution tutorial).
+
+    Returns
+    -------
+    str
+        The path of the model file inside the installed package.
+
+    Example
+    -------
+    >>> import m3
+    >>> data = m3.datasets.liu_demo()
+    >>> model = m3.M3.load(m3.datasets.liu_demo_model("patient_prediction"), data)
+    >>> preds = model.predict_donors()
+    """
+    if name not in _DEMO_MODELS:
+        raise ValueError(
+            f"unknown demo model {name!r}; choose one of {sorted(_DEMO_MODELS)}.")
+    path = str(resources.files("m3.datasets").joinpath("_data", _DEMO_MODELS[name]))
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"{path} is missing; the installed m3 package is incomplete (reinstall m3-sc).")
+    return path

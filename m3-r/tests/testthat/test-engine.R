@@ -82,3 +82,41 @@ test_that("m3_demo(n_cells=) loads a smaller demo with equal cells per batch", {
   expect_equal(as.vector(table(m3_dataset_obs(d)$batch)), c(1000L, 1000L, 1000L))
   expect_error(m3_demo(n_cells = 300, device = "cpu"), "n_cells must be between")
 })
+
+test_that("m3_save / m3_load: a loaded model gives the saved model's read-outs", {
+  skip_if_no_engine()
+  on.exit(m3_shutdown(), add = TRUE)
+  d <- m3_dataset(m3_example_sce(200L, seed = 5L), device = "cpu")
+  m <- m3_train(d, condition_keys = c("cond_group", "Age_interval"),
+                target_condition = "cond_group", celltype_key = "mergedcelltype",
+                donor_key = "sample_id", held_out = "B2",
+                embedding_dim = 12L, max_epochs = 2L,
+                donor_predictor = list(n_epochs = 3L), seed = 0L, device = "cpu")
+  emb   <- m3_embedding(m, "bio")
+  preds <- m3_predict_donors(m)
+  # Column by column: a data.frame from the engine also carries a pointer to the
+  # pandas index it came from, which differs between any two calls.
+  same_columns <- function(a, b) {
+    expect_identical(names(a), names(b))
+    for (n in names(b)) expect_identical(a[[n]], b[[n]])
+  }
+
+  path <- m3_save(m, tempfile(fileext = ".m3"))
+  expect_true(file.exists(path))
+  l <- m3_load(path, d, device = "cpu")
+  expect_s3_class(l, "m3_model")
+  expect_identical(m3_capabilities(l), m3_capabilities(m))
+  expect_identical(m3_embedding(l, "bio"), emb)
+  same_columns(m3_predict_donors(l), preds)
+
+  # the file outlives the session that trained the model
+  m3_shutdown()
+  d2 <- m3_dataset(m3_example_sce(200L, seed = 5L), device = "cpu")
+  l2 <- m3_load(path, d2, device = "cpu")
+  expect_identical(m3_embedding(l2, "bio"), emb)
+  same_columns(m3_predict_donors(l2), preds)
+
+  # a different dataset is refused
+  other <- m3_dataset(m3_example_sce(200L, seed = 6L), device = "cpu")
+  expect_error(m3_load(path, other, device = "cpu"), "not the dataset this model was trained on")
+})

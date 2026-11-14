@@ -74,6 +74,7 @@ internally, so do **not** pre–log-normalise the input.
 | Function | Description |
 |---|---|
 | [`m3_demo()`](#m3_demo) | load the built-in Liu *et al.* CITE-seq demo dataset |
+| [`m3_demo_model()`](#m3_demo_model) | path of a model trained in advance on the demo |
 | [`m3_read_h5()`](#m3_read_h5) | read one batch from paper-format HDF5 matrices + a metadata CSV |
 | [`m3_read_h5ad()`](#m3_read_h5ad) | read one batch from an AnnData `.h5ad` |
 | [`m3_dataset()`](#m3_dataset) | build a dataset from an SCE / MAE / Seurat / list |
@@ -101,6 +102,27 @@ has). Use the full demo for donor-level prediction and attribution.
 **Returns:** an `m3_dataset`.
 
 Maps to Python [`m3.datasets.liu_demo()`](api-python.md#m3datasetsliu_demo).
+
+### `m3_demo_model()`
+
+```r
+m3_demo_model(name = c("patient_prediction", "attribution"),
+              device = c("auto", "cpu", "cuda"))
+```
+
+Path of a model trained in advance on the full demo, shipped with the package.
+Read it with [`m3_load()`](#m3_load) and the full demo data to go straight to
+the read-outs without training: `"patient_prediction"` has batch `B3` held out,
+`"attribution"` is trained on all three batches.
+
+``` r
+data  <- m3_demo()
+model <- m3_load(m3_demo_model("patient_prediction"), data)
+```
+
+**Returns:** the path of the model file.
+
+Maps to Python [`m3.datasets.liu_demo_model()`](api-python.md#m3datasetsliu_demo_model).
 
 ### `m3_read_h5()`
 
@@ -242,6 +264,7 @@ Maps to Python `Dataset.modalities[...]`.
 |---|---|
 | [`m3_train()`](#m3_train) | train the integration VAE (+ optional donor predictor) |
 | [`m3_attach()`](#m3_attach) | store a trained model inside an SCE / MAE |
+| [`m3_save()`](#m3_save) / [`m3_load()`](#m3_load) | write a trained model to a file / read it back without training |
 | [`m3_capabilities()`](#m3_capabilities) | which read-outs a model unlocks |
 | [`m3_reference_vocab()`](#m3_reference_vocab) | leak-safe reference vocabulary the model trained on |
 
@@ -306,6 +329,39 @@ Store a trained `model` inside a `SingleCellExperiment` / `MultiAssayExperiment`
 
 **Returns:** `object` with the model attached. *(R-only convenience; the Python
 `M3` object already holds its own state.)*
+
+### `m3_save()`
+
+```r
+m3_save(model, path)
+```
+
+Write a trained model to `path`, to be read back with [`m3_load()`](#m3_load) in
+a later session. The file holds the trained weights and the model's settings,
+not the data, so it is small.
+
+**Returns:** `path`, invisibly.
+
+Maps to Python [`M3.save()`](api-python.md#m3save).
+
+### `m3_load()`
+
+```r
+m3_load(path, data, device = c("auto", "cpu", "cuda"))
+```
+
+Read a model written by [`m3_save()`](#m3_save), without training again. `data`
+must be the dataset the model was trained on: the same cells in the same order,
+with the same counts, feature names and role columns. The loaded model gives the
+read-outs of the model that was saved: identical in the environment that saved
+it, and equal up to floating-point rounding in another. The exception is
+`m3_generate()` and `m3_augment()`, which draw random numbers: a GPU and a CPU give
+different draws for the same seed. A different dataset or a damaged file is refused
+with an error.
+
+**Returns:** an `m3_model`.
+
+Maps to Python [`M3.load()`](api-python.md#m3load).
 
 ### `m3_capabilities()`
 
@@ -614,7 +670,8 @@ m3_shutdown()
 ```
 
 Shut down the m3 Python session — releases the basilisk process and every live
-model held in it (models are session-bound; re-train to continue).
+model held in it (models are session-bound; keep one with
+[`m3_save()`](#m3_save) and [`m3_load()`](#m3_load), or re-train).
 
 **Returns:** invisible `NULL`. *(R-only — Python has no separate session to
 release.)*
@@ -646,6 +703,8 @@ attached via [`m3_attach()`](#m3_attach).
 | `m3_dataset()` | `m3.from_anndata()` / `m3.read_matrix()` |
 | `m3_concat()` | `m3.concat()` |
 | `m3_train()` | `m3.M3(...).train()` |
+| `m3_save()` / `m3_load()` | `M3.save()` / `M3.load()` |
+| `m3_demo_model()` | `m3.datasets.liu_demo_model()` |
 | `m3_capabilities()` | `M3.capabilities` |
 | `m3_embedding()` | `M3.embedding()` |
 | `m3_cell_metadata()` | `M3.cell_metadata` |
