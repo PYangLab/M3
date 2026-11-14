@@ -20,8 +20,11 @@ hide:
 </p>
 
 ```bash
+conda create -n m3 python=3.11 -y
+conda activate m3
 pip install m3-sc
 ```
+<p style="font-size:12.5px; line-height:1.5; color:var(--text-faint); margin:-8px 0 16px;">Python 3.10 or newer. Without conda, see <a href="installation/">Installation</a>.</p>
 
 <a href="quickstart/" class="md-button md-button--primary lp-cta">Get started</a>
 <a href="overview/" class="md-button lp-cta">How it works</a>
