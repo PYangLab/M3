@@ -69,7 +69,10 @@ m3_capabilities(model)
 ## Data & inputs
 
 All readers return an `m3_dataset` holding **raw counts** — m3 normalises
-internally, so do **not** pre–log-normalise the input.
+internally, so do **not** pre–log-normalise the input. Each call builds **one
+batch** unless the metadata already has a `batch` column, in which case that
+column is kept and `batch =` is ignored. For a walk-through from your own
+objects, see [Use your own data](notebooks/r_05_own_data.md).
 
 | Function | Description |
 |---|---|
@@ -181,6 +184,12 @@ Build an `m3_dataset` from an in-memory object: RNA raw counts in the main assay
 ADT/ATAC as `altExps`, with the role columns in `colData`. `m3_train()` calls
 this for you, so you can also pass the object straight to `m3_train()`.
 
+For a Seurat object, RNA is read from the raw counts of the default assay, and
+`adt_exp` / `atac_exp` name the protein / ATAC assays; an assay that is not found
+is left out without an error. Start the m3 engine before Seurat is loaded, as in
+[Use your own data](notebooks/r_05_own_data.md); in the other order R can crash
+with `*** caught segfault ***`.
+
 | Parameter | Meaning |
 |---|---|
 | `x` | a `SingleCellExperiment`, `MultiAssayExperiment`, `Seurat` object, or a list with `rna`/`adt`/`atac` (features × cells) plus `obs`. |
@@ -202,8 +211,9 @@ m3_concat(datasets)
 ```
 
 Combine single-batch datasets into one multi-batch dataset. Features per modality
-are harmonised by **name intersection** (the first batch's order is kept); batch
-labels must be unique across inputs.
+are harmonised by **name intersection** (the first batch's order is kept); a
+batch missing a whole modality is zero-filled and treated as not measured
+(mosaic design). Batch labels must be unique across inputs.
 
 | Parameter | Meaning |
 |---|---|
@@ -297,7 +307,7 @@ given — the Stage-2 adversarial donor-level disease predictor on top. With
 | `held_out` | character vector of batch labels to hold out as an unlabelled query set (default `NULL`). |
 | `held_out_samples` | character vector of donor IDs to hold out as the query set, possibly spanning batches; mutually exclusive with `held_out` (default `NULL`). |
 | `hvg` | optional named list of per-modality HVG counts, e.g. `list(rna = 1000)` (default `NULL` = all features). |
-| `embedding_dim` | latent width (default `30`). |
+| `embedding_dim` | width of the whole latent (default `30`). The last two dimensions are the batch factor, so the `"bio"` embedding has `embedding_dim - 2` columns. |
 | `max_epochs` | Stage-1 max training epochs (default `300`). |
 | `lr` | Stage-1 learning rate (default `1e-5`). |
 | `batch_size` | Stage-1 training batch size (default `256`). |
@@ -450,6 +460,11 @@ Batch-corrected per-modality reconstruction (posterior-mean decode). With
 `remove_batch = TRUE` (default) the batch latent is zeroed before decoding,
 yielding a batch-corrected matrix suitable for cross-batch differential
 expression.
+
+Rows follow [`m3_cell_metadata()`](#m3_cell_metadata) and columns follow the
+dataset's features (the matrices carry no dimnames). Values are on the scale the
+model trains on, not counts: `log2(count / size + 1)`, where `size` is the cell's
+total count in that modality divided by the mean total over all cells.
 
 **Returns:** a named list of numeric matrices (one per modality), cells ×
 features.
@@ -723,4 +738,5 @@ attached via [`m3_attach()`](#m3_attach).
 - **Tutorials** — [Representation learning](notebooks/r_01_representation_learning.md),
   [Patient prediction](notebooks/r_02_patient_prediction.md),
   [Feature attribution](notebooks/r_03_attribution.md),
-  [Data augmentation](notebooks/r_04_augmentation.md).
+  [Data augmentation](notebooks/r_04_augmentation.md),
+  [Use your own data](notebooks/r_05_own_data.md).

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate runnable Google Colab notebooks for the 4 Python + 4 R tutorials.
+"""Generate runnable Google Colab notebooks for the Python and R tutorials.
 
 The notebooks / pages shown on the docs site are the source of truth and are NOT
 modified. This derives Colab-ready copies into website/colab/, each with a setup
@@ -26,7 +26,8 @@ NB = WEBSITE / "docs" / "notebooks"
 OUT = WEBSITE / "colab"
 
 PY_TUTORIALS = ["py_01_representation_learning", "py_02_patient_prediction",
-                "py_03_attribution", "py_04_augmentation"]
+                "py_03_attribution", "py_04_augmentation",
+                "py_05_own_data", "py_06_mosaic_integration"]
 R_TUTORIALS = ["r_01_representation_learning", "r_02_patient_prediction",
                "r_03_attribution", "r_04_augmentation"]
 

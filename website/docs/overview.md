@@ -45,7 +45,7 @@ The package exposes these capabilities through one [`m3.M3`](api-python.md#m3m3)
 |---|---|---|---|
 | 1 | **Factorised dimension reduction** | condition-aware cell embeddings for clustering / UMAP | [`embedding`](api-python.md#m3embedding) |
 | 2 | **Condition-aware batch correction** | batch-corrected, condition-preserving matrices | [`reconstruct`](api-python.md#m3reconstruct) |
-| 3 | **Mosaic integration & imputation** | one embedding across samples that are missing a modality | [`concat`](api-python.md#m3concat) + [`reconstruct`](api-python.md#m3reconstruct) |
+| 3 | **Mosaic integration & imputation** | one embedding across samples that are missing a modality | [`concat`](api-python.md#m3concat) + [`reconstruct`](api-python.md#m3reconstruct) ([tutorial](notebooks/py_06_mosaic_integration.ipynb)) |
 | 4 | **Patient-level condition inference** | per-donor condition prediction on held-out samples | [`predict_donors`](api-python.md#m3predict_donors) |
 | 5 | **Patient-level sample generation** | synthetic donors / cells to augment small studies | [`augment`](api-python.md#m3augment), [`generate`](api-python.md#m3generate) |
 | 6 | **Multi-resolution attribution** | a condition attributed back to genes, cells, and cell types | [`attribute`](api-python.md#m3attribute) |
@@ -90,5 +90,7 @@ Training is handled inside [`M3.train`](api-python.md#m3train):
 - **Tutorials** — [Representation learning](notebooks/py_01_representation_learning.ipynb),
   [Patient prediction](notebooks/py_02_patient_prediction.ipynb),
   [Feature attribution](notebooks/py_03_attribution.ipynb),
-  [Data augmentation](notebooks/py_04_augmentation.ipynb).
+  [Data augmentation](notebooks/py_04_augmentation.ipynb),
+  [Use your own data](notebooks/py_05_own_data.ipynb),
+  [Mosaic integration](notebooks/py_06_mosaic_integration.ipynb).
 - **API** — the [`m3` reference](api-python.md).
