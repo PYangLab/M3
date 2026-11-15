@@ -207,9 +207,10 @@ m3_concat(datasets)
 ```
 
 Combine datasets into one multi-batch dataset. Features per modality
-are harmonised by **name intersection** (the first batch's order is kept). Every
-dataset needs its batch (`batch =` when it was built, or a `batch` column), and
-batch labels must be unique across inputs.
+are harmonised by **name intersection** (the first batch's order is kept). The
+datasets either all have a `batch` column, with labels unique across inputs, or
+none has one; in the second case `batch_key` in [`m3_train()`](#m3_train) names
+the column that identifies the batches.
 
 | Parameter | Meaning |
 |---|---|

@@ -62,16 +62,25 @@ def test_reader_accepts_a_label_equal_to_the_batch_column():
 
 
 # ------------------------------------------------------------------- concat
-def test_concat_rejects_a_piece_without_a_batch():
-    with pytest.raises(ValueError, match="batch="):
+def test_concat_rejects_inputs_of_which_only_some_have_a_batch():
+    with pytest.raises(ValueError, match="only some"):
         m3.concat([_read(_obs(), batch="A"), _read(_obs())])
+
+
+def test_concat_does_not_need_a_column_called_batch():
+    # the batch column is called 'run' in every piece; batch_key names it later
+    mosaic = m3.concat([_read(_obs(run=["r1"] * 6)), _read(_obs(run=["r2"] * 6), adt=False)])
+    assert "batch" not in mosaic.obs.columns
+    model = m3.M3(mosaic, condition_keys="cond", celltype_key="cty", batch_key="run")
+    assert model.contract["batches"] == ["r1", "r2"]
 
 
 # -------------------------------------------------------------------- model
 def test_model_refuses_to_train_without_a_batch_column():
     d = _read(_obs(run=["r1", "r1", "r1", "r2", "r2", "r2"]))
-    with pytest.raises(ValueError, match="batch_key="):
+    with pytest.raises(ValueError, match="batch_key=") as err:
         m3.M3(d, condition_keys="cond", celltype_key="cty")
+    assert "columns: cond, cty, run" in str(err.value)     # so the user can pick one
 
 
 def test_model_takes_the_batches_from_batch_key():

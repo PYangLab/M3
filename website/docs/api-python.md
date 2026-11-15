@@ -120,8 +120,9 @@ m3.concat(datasets: 'list[Dataset]') -> Dataset
 Stack `Dataset`s into one multi-batch `Dataset`. Features per
 modality are harmonised by **name intersection** (the first batch's order is
 kept); a batch missing a whole modality is zero-filled and flagged in
-`present` (mosaic design). Every input needs its batch (`batch=` when reading it,
-or a `batch` column), and batch labels must be unique across inputs.
+`present` (mosaic design). The inputs either all have a `batch` column, with
+labels unique across inputs, or none has one; in the second case `batch_key` in
+[`m3.M3`](#m3m3) names the column that identifies the batches.
 
 ### `m3.datasets.liu_demo`
 

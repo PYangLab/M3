@@ -108,10 +108,12 @@ class M3:
         if not isinstance(batch_key, str):
             raise TypeError(f"batch_key must be the name of an obs column, not {batch_key!r}.")
         if batch_key not in dataset.obs.columns:
+            cols = [str(c) for c in dataset.obs.columns]
+            shown = ", ".join(cols[:30]) + (", ..." if len(cols) > 30 else "")
             raise ValueError(
-                f"batch_key '{batch_key}' not in dataset.obs. Pass batch_key='<column>' to "
-                "name the obs column that identifies the batches; if all cells are one "
-                "batch, pass batch='<name>' when reading the data.")
+                f"batch_key '{batch_key}' not in dataset.obs (columns: {shown}). Pass "
+                "batch_key='<column>' to name the column that identifies the batches. "
+                "If no column does, pass batch='<name>' when reading each batch.")
 
         # The engine groups cells for integration by obs['batch']. Route batch_key
         # there (on a copy; the caller's Dataset is untouched) so the column the user

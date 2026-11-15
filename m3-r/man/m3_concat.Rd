@@ -14,9 +14,10 @@ an \code{m3_dataset}.
 }
 \description{
 Features per modality are harmonised by name intersection (first batch's
-order). Every dataset needs its batch (\code{batch =} when it was built, or
-a \code{batch} column), and batch labels must be unique. Mirrors
-\code{m3.concat}.
+order). The datasets either all have a \code{batch} column, with labels
+unique across inputs, or none has one; in the second case \code{batch_key}
+in \code{\link{m3_train}} names the column that identifies the batches.
+Mirrors \code{m3.concat}.
 }
 \examples{
 \donttest{
