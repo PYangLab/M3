@@ -51,7 +51,7 @@ Build a dataset from your own data (a `SingleCellExperiment` with RNA in the mai
 assay and ADT/ATAC as `altExp`s; role columns in `colData`):
 
 ```r
-data <- m3_dataset(sce, batch = "batch1")
+data <- m3_dataset(sce)   # batches: the colData column named by batch_key in m3_train()
 # or read paper-format HDF5 directly (big data stays in Python):
 data <- m3_concat(list(
   m3_read_h5(rna = "rna1.h5", adt = "adt1.h5", metadata = "metadata1.csv", batch = "batch1"),

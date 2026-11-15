@@ -9,7 +9,7 @@ m3_read_h5(
   adt = NULL,
   atac = NULL,
   metadata,
-  batch = "batch0",
+  batch = NULL,
   device = c("auto", "cpu", "cuda")
 )
 }
@@ -18,7 +18,8 @@ m3_read_h5(
 
 \item{metadata}{path to the per-cell metadata \code{.csv}.}
 
-\item{batch}{batch label written to \code{obs$batch}.}
+\item{batch}{the label of this batch, written to \code{obs$batch}; see
+\code{\link{m3_dataset}}.}
 
 \item{device}{session device (see \code{\link{m3_dataset}}).}
 }

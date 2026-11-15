@@ -14,7 +14,9 @@ class Dataset:
     """Multimodal, multi-batch raw-count container.
 
     modalities: {name -> csr_matrix [n_cells, n_features]} raw counts
-    obs:        DataFrame [n_cells, ...]; must contain a 'batch' column
+    obs:        DataFrame [n_cells, ...]; a 'batch' column, when there is one,
+                identifies the batches (the model can be pointed at another
+                column with batch_key)
     var:        {name -> pd.Index of feature names}, aligned to each modality's columns
     present:    {name -> bool ndarray [n_cells]} per-cell modality presence
     """
@@ -28,8 +30,6 @@ class Dataset:
         if not self.modalities:
             raise ValueError("Dataset requires at least one modality.")
         n = self.obs.shape[0]
-        if "batch" not in self.obs.columns:
-            raise ValueError("obs must contain a 'batch' column.")
         for name, mat in self.modalities.items():
             if mat.shape[0] != n:
                 raise ValueError(
@@ -56,8 +56,12 @@ class Dataset:
 
     @property
     def batches(self) -> list[str]:
+        """Labels in obs['batch']; empty when obs has no such column."""
+        if "batch" not in self.obs.columns:
+            return []
         return list(pd.unique(self.obs["batch"]))
 
     def __repr__(self) -> str:
         mods = ", ".join(f"{k}:{v.shape[1]}" for k, v in self.modalities.items())
-        return f"Dataset(n_cells={self.n_cells}, batches={self.batches}, modalities=[{mods}])"
+        batches = self.batches if "batch" in self.obs.columns else "not set"
+        return f"Dataset(n_cells={self.n_cells}, batches={batches}, modalities=[{mods}])"

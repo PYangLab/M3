@@ -2,7 +2,7 @@
 % Please edit documentation in R/dataset.R
 \name{m3_concat}
 \alias{m3_concat}
-\title{Combine single-batch datasets into one multi-batch dataset.}
+\title{Combine datasets into one multi-batch dataset.}
 \usage{
 m3_concat(datasets)
 }
@@ -14,7 +14,9 @@ an \code{m3_dataset}.
 }
 \description{
 Features per modality are harmonised by name intersection (first batch's
-order); batch labels must be unique. Mirrors \code{m3.concat}.
+order). Every dataset needs its batch (\code{batch =} when it was built, or
+a \code{batch} column), and batch labels must be unique. Mirrors
+\code{m3.concat}.
 }
 \examples{
 \donttest{

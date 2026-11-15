@@ -120,3 +120,29 @@ test_that("m3_save / m3_load: a loaded model gives the saved model's read-outs",
   other <- m3_dataset(m3_example_sce(200L, seed = 6L), device = "cpu")
   expect_error(m3_load(path, other, device = "cpu"), "not the dataset this model was trained on")
 })
+
+test_that("the batch comes from batch_key, and no batch is invented", {
+  skip_if_no_engine()
+  on.exit(m3_shutdown(), add = TRUE)
+
+  sce  <- m3_example_sce(n_cells = 160L, seed = 1L)
+  meta <- as.data.frame(SummarizedExperiment::colData(sce))
+  names(meta)[names(meta) == "batch"] <- "run"
+  parts <- list(rna = SingleCellExperiment::counts(sce), obs = meta)
+
+  d <- m3_dataset(parts, device = "cpu")
+  expect_false("batch" %in% colnames(m3_dataset_obs(d)))
+  expect_output(print(d), "batches=not set", fixed = TRUE)
+
+  expect_error(
+    m3_train(d, condition_keys = "cond_group", celltype_key = "mergedcelltype",
+             donor_prediction = FALSE, max_epochs = 1L, device = "cpu"),
+    "batch_key=")
+  m <- m3_train(d, condition_keys = "cond_group", celltype_key = "mergedcelltype",
+                batch_key = "run", embedding_dim = 16L, donor_prediction = FALSE,
+                max_epochs = 1L, device = "cpu")
+  expect_setequal(unique(m3_cell_metadata(m)$run), c("B1", "B2"))
+
+  # a label that contradicts an existing batch column is refused
+  expect_error(m3_dataset(sce, batch = "other", device = "cpu"), "already has a 'batch' column")
+})

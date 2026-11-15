@@ -19,7 +19,8 @@
 #'   predictor + attribution need \code{donor_key} + \code{celltype_key};
 #'   \code{batch_key} (default \code{"batch"}) is the obs column identifying
 #'   batches — both the held-out/integration unit and the site the donor
-#'   adversary removes.
+#'   adversary removes. Training stops with an error when that column is
+#'   missing.
 #' @param held_out character vector of batch labels to hold out (leak-safe).
 #' @param held_out_samples character vector of donor IDs (values of
 #'   \code{donor_key}) to hold out as the query set — they may span multiple

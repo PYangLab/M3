@@ -99,10 +99,19 @@ class M3:
         for col in condition_keys:
             if col not in dataset.obs.columns:
                 raise ValueError(f"condition key '{col}' not in dataset.obs.")
-        for nm, col in (("celltype_key", celltype_key), ("donor_key", donor_key),
-                        ("batch_key", batch_key)):
+        for nm, col in (("celltype_key", celltype_key), ("donor_key", donor_key)):
             if col is not None and col not in dataset.obs.columns:
                 raise ValueError(f"{nm} '{col}' not in dataset.obs.")
+        # The readers do not invent a batch, so a missing column means nobody has
+        # said which cells form a batch. Training on would silently skip batch
+        # correction, hence an error and not a default.
+        if not isinstance(batch_key, str):
+            raise TypeError(f"batch_key must be the name of an obs column, not {batch_key!r}.")
+        if batch_key not in dataset.obs.columns:
+            raise ValueError(
+                f"batch_key '{batch_key}' not in dataset.obs. Pass batch_key='<column>' to "
+                "name the obs column that identifies the batches; if all cells are one "
+                "batch, pass batch='<name>' when reading the data.")
 
         # The engine groups cells for integration by obs['batch']. Route batch_key
         # there (on a copy; the caller's Dataset is untouched) so the column the user
@@ -116,6 +125,7 @@ class M3:
             import dataclasses
             dataset = dataclasses.replace(
                 dataset, obs=dataset.obs.assign(batch=dataset.obs[batch_key]))
+        _bridge.check_batch_modalities(dataset, batch_key)
         if dataset.obs["batch"].nunique() == 1:
             warnings.warn(
                 "only one batch found; no batch correction will be applied.", stacklevel=2)

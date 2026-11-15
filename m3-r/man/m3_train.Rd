@@ -44,7 +44,8 @@ first of \code{condition_keys}).}
 predictor + attribution need \code{donor_key} + \code{celltype_key};
 \code{batch_key} (default \code{"batch"}) is the obs column identifying
 batches — both the held-out/integration unit and the site the donor
-adversary removes.}
+adversary removes. Training stops with an error when that column is
+missing.}
 
 \item{held_out}{character vector of batch labels to hold out (leak-safe).}
 
