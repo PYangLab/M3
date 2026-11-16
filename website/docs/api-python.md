@@ -166,7 +166,7 @@ Dataset(n_cells=30534, batches=['B1', 'B2', 'B3'], modalities=[rna:1000, adt:192
 `obs` carries the columns `batch` (`B1` / `B2` / `B3`), `sample_id`, `Donor`,
 `cond_group` (`HC` / `Severe`), `Age_interval`, and `mergedcelltype`.
 
-Pass `n_cells` (2,250 to 21,489) to load a smaller, fixed subsample instead of
+Pass `n_cells` (1,050 to 13,329) to load a smaller, fixed subsample instead of
 all 30,534 cells. Training time is proportional to the number of cells, so this
 is the quickest way to try cell-level integration on a CPU:
 
@@ -175,9 +175,10 @@ is the quickest way to try cell-level integration on a CPU:
 Dataset(n_cells=6000, batches=['B1', 'B2', 'B3'], modalities=[rna:1000, adt:192])
 ```
 
-The same cells are returned on every call. Each batch contributes equally, and
-every cell type of every batch keeps at least 50 cells (or all it has), so no
-cell type is lost. Donor-level prediction and attribution need enough cells per
+The same cells are returned on every call. They come from seven well-separated
+major cell types that every batch has: B_Mem, CD4_Mem, CD8_Va7.2,
+Mono_Classical, Mono_Nonclassical, NK and Plasmablast. Each batch contributes
+equally, and each of these types keeps at least 50 cells in every batch. Donor-level prediction and attribution need enough cells per
 donor, so use the full demo there.
 
 ### `m3.datasets.liu_demo_model`
