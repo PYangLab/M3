@@ -146,3 +146,18 @@ test_that("the batch comes from batch_key, and no batch is invented", {
   # a label that contradicts an existing batch column is refused
   expect_error(m3_dataset(sce, batch = "other", device = "cpu"), "already has a 'batch' column")
 })
+
+test_that("the cell-level model trains without cell-type labels", {
+  skip_if_no_engine()
+  on.exit(m3_shutdown(), add = TRUE)
+
+  sce  <- m3_example_sce(n_cells = 160L, seed = 1L)
+  meta <- as.data.frame(SummarizedExperiment::colData(sce))[, c("batch", "cond_group")]
+  d <- m3_dataset(list(rna = SingleCellExperiment::counts(sce), obs = meta), device = "cpu")
+
+  m <- m3_train(d, condition_keys = "cond_group", embedding_dim = 16L,
+                max_epochs = 1L, device = "cpu")
+  expect_equal(nrow(m3_embedding(m, "bio")), 160L)
+  expect_false(m3_capabilities(m)[["predict_donors"]])
+  expect_false(any(startsWith(colnames(m3_cell_metadata(m)), "__m3")))
+})
