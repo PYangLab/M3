@@ -81,10 +81,10 @@ your own objects, see [Use your own data](notebooks/r_05_own_data.md).
 |---|---|
 | [`m3_demo()`](#m3_demo) | load the built-in Liu *et al.* CITE-seq demo dataset |
 | [`m3_demo_model()`](#m3_demo_model) | path of a model trained in advance on the demo |
-| [`m3_read_h5()`](#m3_read_h5) | read one batch from paper-format HDF5 matrices + a metadata CSV |
-| [`m3_read_h5ad()`](#m3_read_h5ad) | read one batch from an AnnData `.h5ad` |
+| [`m3_read_h5()`](#m3_read_h5) | read paper-format HDF5 matrices + a metadata CSV |
+| [`m3_read_h5ad()`](#m3_read_h5ad) | read an AnnData `.h5ad` |
 | [`m3_dataset()`](#m3_dataset) | build a dataset from an SCE / MAE / Seurat / list |
-| [`m3_concat()`](#m3_concat) | combine single-batch datasets into one multi-batch dataset |
+| [`m3_concat()`](#m3_concat) | combine datasets into one multi-batch dataset |
 | [`m3_example_sce()`](#m3_example_sce) | a small synthetic RNA + ADT `SingleCellExperiment` for examples |
 | [`m3_dataset_obs()`](#m3_dataset_obs) | per-cell metadata (obs) of a dataset |
 | [`m3_dataset_matrix()`](#m3_dataset_matrix) | dense count matrix for one modality of a dataset |
@@ -137,7 +137,7 @@ m3_read_h5(rna = NULL, adt = NULL, atac = NULL, metadata,
            batch = NULL, device = c("auto", "cpu", "cuda"))
 ```
 
-Read one batch from paper-format HDF5 count matrices (counts under `matrix/data`,
+Read paper-format HDF5 count matrices (counts under `matrix/data`,
 names under `matrix/features`) plus a per-cell metadata CSV. Big data stays in
 Python.
 
@@ -161,7 +161,7 @@ m3_read_h5ad(path, batch = NULL, modality = "rna",
              device = c("auto", "cpu", "cuda"))
 ```
 
-Read one batch from an AnnData `.h5ad` file. If `var` has a `feature_types`
+Read an AnnData `.h5ad` file. If `var` has a `feature_types`
 column the matrix is split into modalities; otherwise the whole matrix is taken
 as `modality`.
 

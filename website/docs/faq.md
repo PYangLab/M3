@@ -10,8 +10,9 @@ tags:
 ### What input does M3 take?
 
 Raw counts for each modality (`rna`, `adt`, `atac`) and a per-cell table with a
-batch column, one or two condition columns and a cell-type column. The
-"Use your own data" tutorial goes from files or objects to a trained model, in
+batch column and one or two condition columns. The donor-level tasks (donor
+prediction, attribution, augmentation) also need a cell-type column and a donor
+column. The "Use your own data" tutorial goes from files or objects to a trained model, in
 [Python](notebooks/py_05_own_data.ipynb) and in [R](notebooks/r_05_own_data.md).
 
 ### My RNA and ADT (or ATAC) are in separate files
@@ -21,6 +22,13 @@ to [`m3.read_matrix`](api-python.md#m3read_matrix) (Python) or
 [`m3_dataset()`](api-r.md#m3_dataset) (R). See
 [Use your own data](notebooks/py_05_own_data.ipynb). MuData works the same way:
 pass `mdata["rna"].X` and the other modalities to `read_matrix`.
+
+### My batch column is not called `batch`
+
+Leave it as it is and name it when you build the model: `batch_key="run"` in
+[`m3.M3`](api-python.md#m3m3) or [`m3_train()`](api-r.md#m3_train). Until then
+the printed dataset shows `batches=not set`. A model built without a batch
+column stops with an error that lists the columns to choose from.
 
 ### My batches do not all measure the same modalities
 
@@ -37,11 +45,9 @@ are in a layer, pass the layer instead of `.X`, as in
 
 ### I have no cell-type labels
 
-A cell-type column is required for training. The labels are used by the donor
-predictor, attribution and augmentation. The cell-level model
-(`donor_prediction=False`) does not use them, so for an embedding you can add a
-placeholder column to `obs`, for example `obs["celltype"] = "unknown"`, and pass
-that.
+The embedding does not need them: leave `celltype_key` out, and `train()` fits
+the cell-level model from the condition and batch columns alone. The donor
+predictor, attribution and augmentation use cell types and need the column.
 
 ### My study has one condition, or more than two
 

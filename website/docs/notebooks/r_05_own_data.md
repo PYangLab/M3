@@ -42,7 +42,7 @@ head(meta, 3)
 | **Modalities** | RNA, ADT and/or ATAC. |
 | **Cells** | Within a batch, the same cells in every modality, in the same order. |
 | **Features** | Unique names per modality, named the same way in every batch. |
-| **Metadata columns** | A batch column (for example the sequencing run), one or two condition columns (for example disease status) and a cell-type column. A donor column as well for the donor-level tasks. |
+| **Metadata columns** | A batch column (for example the sequencing run) and one or two condition columns (for example disease status). The donor-level tasks also need a cell-type column and a donor column. |
 
 ## 2. Separate matrices per modality
 
@@ -59,20 +59,22 @@ data
 The batches printed here come from the metadata column called `batch`.
 If your batch column has another name, leave it as it is and pass it as
 `batch_key = "run"` to `m3_train()`: the printed dataset then shows
-`batch0`, and the printed model shows which column is the batch. Check
-that the printed dataset lists your modalities.
+`batches=not set`, and the printed model shows which column is the
+batch. Without a batch column `m3_train()` stops with an error that
+lists the metadata columns. Check that the printed dataset lists your
+modalities.
 
 ## 3. Train and read out
 
-`condition_keys` (one or two columns) and `celltype_key` tell the model
-which metadata columns to use; both are required.
-`donor_prediction = FALSE` trains the cell-level model only, which is
-all the embedding needs.
+`condition_keys` (one or two columns) tells the model which metadata
+columns hold the conditions; it is required. With the condition and
+batch columns alone, `m3_train()` fits the cell-level model, which is
+all the embedding needs. `celltype_key` and `donor_key` are for the
+donor-level tasks.
 
 ``` r
-model <- m3_train(data, condition_keys = "cond_group", celltype_key = "mergedcelltype",
-                  donor_prediction = FALSE)
-#> Batch counts: {0: 192, 1: 168}
+model <- m3_train(data, condition_keys = "cond_group")
+#> Batch counts: {np.int64(0): np.int64(192), np.int64(1): np.int64(168)}
 #> Minimum batch size: 168
 #> Epoch 1, Validation Loss: 7.8255
 #> Epoch 2, Validation Loss: 7.8842
@@ -100,9 +102,10 @@ condition; `part = "intrinsic"` leaves them out.
 
 The model lives in the running R session and is not stored by
 `saveRDS()` or `save.image()`. To keep it, write it with
-[`m3_save(model, "model.m3")`](../api-r.md#m3_save) and read it back in a later
-session with [`m3_load("model.m3", data)`](../api-r.md#m3_load), which needs the
-same `data`. Read-outs are ordinary R objects: `saveRDS(emb, "m3_embedding.rds")`.
+[`m3_save(model, "model.m3")`](../api-r.md#m3_save) and read it back in
+a later session with [`m3_load("model.m3", data)`](../api-r.md#m3_load),
+which needs the same `data`. Read-outs are ordinary R objects:
+`saveRDS(emb, "m3_embedding.rds")`.
 
 ## 4. SingleCellExperiment or Seurat objects
 
@@ -143,9 +146,8 @@ so[["Protein"]] <- CreateAssayObject(counts = as(adt[, colnames(rna)], "dgCMatri
 data <- m3_dataset(so, adt_exp = "Protein")
 data
 #> m3_dataset(n_cells=360, batches=[B1, B2], modalities=[rna:60, adt:12])
-model <- m3_train(data, condition_keys = "cond_group", celltype_key = "mergedcelltype",
-                  donor_prediction = FALSE)
-#> Batch counts: {0: 192, 1: 168}
+model <- m3_train(data, condition_keys = "cond_group")
+#> Batch counts: {np.int64(0): np.int64(192), np.int64(1): np.int64(168)}
 #> Minimum batch size: 168
 #> Epoch 1, Validation Loss: 7.8255
 #> Epoch 2, Validation Loss: 7.8842
@@ -179,7 +181,7 @@ so
 
 Build one dataset per batch, each with the modalities it has, and stack
 them with `m3_concat()`. Here batch `B2` has RNA only. `batch =` names
-the batch when `obs` has no `batch` column.
+each batch, because the metadata passed here has no `batch` column.
 
 ``` r
 b1 <- rownames(meta)[meta$batch == "B1"]
@@ -210,9 +212,8 @@ Training is the same call, and the embedding covers the cells of both
 batches.
 
 ``` r
-model <- m3_train(mosaic, condition_keys = "cond_group", celltype_key = "mergedcelltype",
-                  donor_prediction = FALSE)
-#> Batch counts: {0: 192, 1: 168}
+model <- m3_train(mosaic, condition_keys = "cond_group")
+#> Batch counts: {np.int64(0): np.int64(192), np.int64(1): np.int64(168)}
 #> Minimum batch size: 168
 #> Epoch 1, Validation Loss: 7.1456
 #> Epoch 2, Validation Loss: 7.2440

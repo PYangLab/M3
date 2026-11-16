@@ -180,14 +180,14 @@ See the [R tutorials](notebooks/r_01_representation_learning.md) and the
 ## Input data format
 
 M3 takes **raw counts** — it normalises internally, so do **not** pre–log-normalise.
-Each batch is a multimodal table (RNA and/or ADT and/or ATAC) plus per-cell
-metadata with a **batch** column, a **condition / phenotype** column and a
-**cell-type** column, and a **donor / sample** column for the donor-level tasks.
-Load batches with
+The input is one count matrix per modality (RNA and/or ADT and/or ATAC) plus
+per-cell metadata with a **batch** column and a **condition / phenotype** column.
+The donor-level tasks also need a **cell-type** column and a
+**donor / sample** column. Read the data with
 [`m3.read_h5`](api-python.md#m3read_h5), [`m3.read_h5ad`](api-python.md#m3read_h5ad),
 [`m3.from_anndata`](api-python.md#m3from_anndata) or
-[`m3.read_matrix`](api-python.md#m3read_matrix), and combine them with
-[`m3.concat`](api-python.md#m3concat). See the [API reference](api-python.md) for exact signatures,
+[`m3.read_matrix`](api-python.md#m3read_matrix); batches that are read separately
+are combined with [`m3.concat`](api-python.md#m3concat). See the [API reference](api-python.md) for exact signatures,
 and [Use your own data](notebooks/py_05_own_data.ipynb) for a worked example.
 
 ---
