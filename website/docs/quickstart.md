@@ -134,8 +134,9 @@ example with the batch-stratified UMAP:
 
 - [Use your own data](notebooks/py_05_own_data.ipynb) — from `.h5ad` files to a
   trained model, and [mosaic integration](notebooks/py_06_mosaic_integration.ipynb)
-  for batches that measure different modalities. In R, with Seurat or
-  SingleCellExperiment objects: [Use your own data (R)](notebooks/r_05_own_data.md).
+  for batches that measure different modalities. Data in a Seurat or
+  SingleCellExperiment object is first written to `.h5ad`, as shown
+  [there](notebooks/py_05_own_data.ipynb#seurat-or-singlecellexperiment).
 - The [tutorials](notebooks/py_01_representation_learning.ipynb) — the same
   workflow, fully executed with figures.
 - The [API reference](api-python.md) — every argument and return type.
