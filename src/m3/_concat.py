@@ -20,17 +20,26 @@ def _intersect_ordered(indices: list[pd.Index]) -> pd.Index:
 
 
 def concat(datasets: list[Dataset]) -> Dataset:
-    """Combine single-batch Datasets into one multi-batch Dataset.
+    """Stack Datasets into one multi-batch Dataset.
 
     - features per modality are harmonized by NAME intersection (first batch's order)
     - a batch missing a whole modality is zero-filled with present[modality]=False
-    - batch labels must be unique across inputs
+    - the inputs either all have a 'batch' column, with labels unique across
+      inputs, or none has one (the model then takes the batches from the
+      column named by batch_key)
     """
     if not datasets:
         raise ValueError("concat requires at least one Dataset.")
     if len(datasets) == 1:
         return datasets[0]
 
+    # A 'batch' column in only some inputs would leave the cells of the others
+    # with an empty batch after stacking.
+    unlabelled = [i for i, d in enumerate(datasets) if "batch" not in d.obs.columns]
+    if unlabelled and len(unlabelled) < len(datasets):
+        raise ValueError(
+            f"only some inputs have a 'batch' column (input(s) {unlabelled} have none). "
+            "Pass batch='<name>' when reading those too, or drop the column from the others.")
     labels = [c for d in datasets for c in d.batches]
     if len(labels) != len(set(labels)):
         raise ValueError(f"batch labels must be unique across inputs; got {labels}.")

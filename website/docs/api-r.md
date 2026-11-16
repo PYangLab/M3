@@ -53,8 +53,8 @@ in [`m3_train()`](#m3_train):
 
 | Read-out | Needs |
 |---|---|
-| [`m3_embedding()`](#m3_embedding), [`m3_reconstruct()`](#m3_reconstruct), [`m3_generate()`](#m3_generate) | a trained model |
-| [`m3_augment()`](#m3_augment) | also `donor_key` |
+| [`m3_embedding()`](#m3_embedding), [`m3_reconstruct()`](#m3_reconstruct), [`m3_generate()`](#m3_generate) | a trained model; a condition and a batch column are enough |
+| [`m3_augment()`](#m3_augment) | also `donor_key` and `celltype_key` |
 | [`m3_predict_donors()`](#m3_predict_donors), [`m3_donor_embedding()`](#m3_donor_embedding), [`m3_attribute()`](#m3_attribute) | also the donor predictor |
 
 The **donor predictor** is the second training stage. `m3_train()` runs it when
@@ -74,10 +74,8 @@ m3_capabilities(model)
 ## Data & inputs
 
 All readers return an `m3_dataset` holding **raw counts** — m3 normalises
-internally, so do **not** pre–log-normalise the input. Each call builds **one
-batch** unless the metadata already has a `batch` column, in which case that
-column is kept and `batch =` is ignored. For a walk-through from your own
-objects, see [Use your own data](notebooks/r_05_own_data.md).
+internally, so do **not** pre–log-normalise the input. For a walk-through from
+your own objects, see [Use your own data](notebooks/r_05_own_data.md).
 
 | Function | Description |
 |---|---|
@@ -136,7 +134,7 @@ Maps to Python [`m3.datasets.liu_demo_model()`](api-python.md#m3datasetsliu_demo
 
 ```r
 m3_read_h5(rna = NULL, adt = NULL, atac = NULL, metadata,
-           batch = "batch0", device = c("auto", "cpu", "cuda"))
+           batch = NULL, device = c("auto", "cpu", "cuda"))
 ```
 
 Read one batch from paper-format HDF5 count matrices (counts under `matrix/data`,
@@ -149,7 +147,7 @@ Python.
 | `adt` | path to the ADT `.h5` file (optional). |
 | `atac` | path to the ATAC `.h5` file (optional). |
 | `metadata` | path to the per-cell metadata `.csv` providing the role columns *(required)*. |
-| `batch` | batch label written to `obs$batch` (default `"batch0"`). |
+| `batch` | the label of this batch, written to `obs$batch`; see [`m3_dataset()`](#m3_dataset) (default `NULL`). |
 | `device` | session device (default `"auto"`). |
 
 **Returns:** an `m3_dataset`.
@@ -159,7 +157,7 @@ Maps to Python [`m3.read_h5()`](api-python.md#m3read_h5).
 ### `m3_read_h5ad()`
 
 ```r
-m3_read_h5ad(path, batch = "batch0", modality = "rna",
+m3_read_h5ad(path, batch = NULL, modality = "rna",
              device = c("auto", "cpu", "cuda"))
 ```
 
@@ -170,7 +168,7 @@ as `modality`.
 | Parameter | Meaning |
 |---|---|
 | `path` | path to the `.h5ad` file. |
-| `batch` | batch label (default `"batch0"`). |
+| `batch` | the label of this batch, written to `obs$batch`; see [`m3_dataset()`](#m3_dataset) (default `NULL`). |
 | `modality` | modality name used when `var` has no `feature_types` column (default `"rna"`). |
 | `device` | session device (default `"auto"`). |
 
@@ -181,7 +179,7 @@ Maps to Python [`m3.read_h5ad()`](api-python.md#m3read_h5ad).
 ### `m3_dataset()`
 
 ```r
-m3_dataset(x, batch = "batch0", assay = "counts", adt_exp = "ADT",
+m3_dataset(x, batch = NULL, assay = "counts", adt_exp = "ADT",
            atac_exp = "ATAC", device = c("auto", "cpu", "cuda"))
 ```
 
@@ -195,10 +193,15 @@ is left out without an error. Start the m3 engine before Seurat is loaded, as in
 [Use your own data](notebooks/r_05_own_data.md); in the other order R can crash
 with `*** caught segfault ***`.
 
+The batches are read from the metadata column named by `batch_key` in
+[`m3_train()`](#m3_train) (default `"batch"`). No batch is made up: when the
+metadata has no `batch` column, the printed dataset shows `batches=not set`, and
+`m3_train()` stops with an error unless `batch_key` names the column to use.
+
 | Parameter | Meaning |
 |---|---|
 | `x` | a `SingleCellExperiment`, `MultiAssayExperiment`, `Seurat` object, or a list with `rna`/`adt`/`atac` (features × cells) plus `obs`. |
-| `batch` | batch label written to `obs$batch` (default `"batch0"`). |
+| `batch` | when all cells are one batch, its label, written to `obs$batch` (default `NULL`). An error if the metadata already has a `batch` column with other values. |
 | `assay` | assay selector for the RNA main assay of SCE input (default `"counts"`). |
 | `adt_exp` | `altExp` selector for ADT in SCE input (default `"ADT"`). |
 | `atac_exp` | `altExp` selector for ATAC in SCE input (default `"ATAC"`). |
@@ -215,10 +218,12 @@ Maps to Python [`m3.from_anndata()`](api-python.md#m3from_anndata) /
 m3_concat(datasets)
 ```
 
-Combine single-batch datasets into one multi-batch dataset. Features per modality
+Combine datasets into one multi-batch dataset. Features per modality
 are harmonised by **name intersection** (the first batch's order is kept); a
 batch missing a whole modality is zero-filled and treated as not measured
-(mosaic design). Batch labels must be unique across inputs.
+(mosaic design). The datasets either all have a `batch` column, with labels
+unique across inputs, or none has one; in the second case `batch_key` in
+[`m3_train()`](#m3_train) names the column that identifies the batches.
 
 | Parameter | Meaning |
 |---|---|
@@ -306,9 +311,9 @@ given — the Stage-2 adversarial donor-level disease predictor on top. With
 | `data` | an `m3_dataset`, or any input `m3_dataset()` accepts (SCE / MAE / Seurat / list), converted automatically. |
 | `condition_keys` | character vector of condition columns in `obs` *(required)*; each gets its own latent factor. |
 | `target_condition` | the condition to predict / attribute (default: the first of `condition_keys`). |
-| `celltype_key` | cell-type role column; the donor predictor + attribution need `donor_key` + `celltype_key` (default `NULL`). |
+| `celltype_key` | cell-type role column; the donor predictor, attribution and `m3_augment()` need `donor_key` + `celltype_key` (default `NULL`). The cell-level model does not use it, so an embedding needs only `condition_keys` and the batch column. |
 | `donor_key` | donor/sample role column; needed by the donor predictor + attribution (default `NULL`). |
-| `batch_key` | batch role column (effective default `"batch"`); the held-out / integration unit and the site the donor adversary removes. After training, the `batch` column of `m3_cell_metadata()` holds this column's values. |
+| `batch_key` | batch role column (effective default `"batch"`); the held-out / integration unit and the site the donor adversary removes. Training stops with an error when the metadata has no such column. The cells of one batch must all have the same modalities. After training, the `batch` column of `m3_cell_metadata()` holds this column's values. |
 | `held_out` | character vector of batch labels to hold out as an unlabelled query set (default `NULL`). |
 | `held_out_samples` | character vector of donor IDs to hold out as the query set, possibly spanning batches; mutually exclusive with `held_out` (default `NULL`). |
 | `hvg` | optional named list of per-modality HVG counts, e.g. `list(rna = 1000)` (default `NULL` = all features). |

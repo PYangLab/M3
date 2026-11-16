@@ -6,7 +6,7 @@
 \usage{
 m3_read_h5ad(
   path,
-  batch = "batch0",
+  batch = NULL,
   modality = "rna",
   device = c("auto", "cpu", "cuda")
 )
@@ -14,7 +14,8 @@ m3_read_h5ad(
 \arguments{
 \item{path}{path to the \code{.h5ad}.}
 
-\item{batch}{batch label.}
+\item{batch}{the label of this batch, written to \code{obs$batch}; see
+\code{\link{m3_dataset}}.}
 
 \item{modality}{modality name used when \code{var} has no \code{feature_types}.}
 

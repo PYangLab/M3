@@ -10,6 +10,13 @@ test_that("print.m3_dataset is informative", {
   expect_output(print(d), "rna:1000")
 })
 
+test_that("print.m3_dataset says when no batch has been set", {
+  d <- new_m3_dataset(0L, list(n_cells = 100L, batches = list(),
+                               modalities = "rna", n_features = list(rna = 1000L),
+                               obs_columns = "run"))
+  expect_output(print(d), "batches=not set", fixed = TRUE)
+})
+
 test_that("print.m3_model shows roles + capabilities", {
   m <- new_m3_model(list(handle = 0L, modalities = "rna", embedding_dim = 30L,
                          condition_keys = c("cond_group", "Age_interval"),

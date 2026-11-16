@@ -76,11 +76,11 @@ def test_batch_key_selects_the_integration_batches():
                   batch_key="site")
     model.train(max_epochs=1, donor_prediction=False)
     assert model._generator.batch_classify_dim == adata.obs["site"].nunique() == 3
-    assert list(ds.obs["batch"].unique()) == ["batch0"]   # caller's Dataset untouched
+    assert "batch" not in ds.obs.columns                  # caller's Dataset untouched
 
 
 def test_single_batch_warns():
-    ds = m3.from_anndata(_interleaved_adata())            # only the 'batch0' placeholder
+    ds = m3.from_anndata(_interleaved_adata(), batch="only")
     with pytest.warns(UserWarning, match="only one batch"):
         m3.M3(ds, condition_keys=["cond"], celltype_key="cty")
 
