@@ -158,19 +158,28 @@ Maps to Python [`m3.read_h5()`](api-python.md#m3read_h5).
 ### `m3_read_h5ad()`
 
 ```r
-m3_read_h5ad(path, batch = NULL, modality = "rna",
+m3_read_h5ad(path, batch = NULL, modality = "rna", batch_key = "batch",
+             layer = NULL, join = c("exact", "inner"),
              device = c("auto", "cpu", "cuda"))
 ```
 
-Read an AnnData `.h5ad` file. If `var` has a `feature_types`
-column the matrix is split into modalities; otherwise the whole matrix is taken
-as `modality`.
+Read AnnData `.h5ad` file(s): one file, or one file per modality as a named
+list, e.g. `list(rna = "rna.h5ad", adt = "adt.h5ad")`. With one file per
+modality the cells are matched by name, a cell missing from a file is marked as
+not measured for that modality, and within a batch every modality must have the
+same cells, or none of them; this is checked from `obs` before any counts are
+loaded (see Python [`m3.read_h5ad()`](api-python.md#m3read_h5ad) for every
+check). With one file, if `var` has a `feature_types` column the matrix is split
+into modalities; otherwise the whole matrix is taken as `modality`.
 
 | Parameter | Meaning |
 |---|---|
-| `path` | path to the `.h5ad` file. |
-| `batch` | the label of this batch, written to `obs$batch`; see [`m3_dataset()`](#m3_dataset) (default `NULL`). |
-| `modality` | modality name used when `var` has no `feature_types` column (default `"rna"`). |
+| `path` | path to one `.h5ad` file, or a named list of paths, one per modality. |
+| `batch` | when all cells are one batch, its label, written to `obs$batch`; see [`m3_dataset()`](#m3_dataset) (default `NULL`). |
+| `modality` | modality name used for a single file whose `var` has no `feature_types` column (default `"rna"`). |
+| `batch_key` | with one file per modality, the `obs` column that identifies the batches (default `"batch"`). |
+| `layer` | where the raw counts are, if not in `X`: a layer name, or a named list of layer names per modality (default `NULL`). |
+| `join` | with one file per modality: `"exact"` (every modality of a batch has the same cells, else an error) or `"inner"` (keep the cells every modality of the batch has, and report the others). |
 | `device` | session device (default `"auto"`). |
 
 **Returns:** an `m3_dataset`.

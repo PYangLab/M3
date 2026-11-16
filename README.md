@@ -59,10 +59,12 @@ More demos, together with their expected outputs, are available in the [tutorial
 
 ## Using M3 on your own data
 
-M3 takes raw counts. Each batch needs a count matrix (RNA and/or ADT and/or ATAC)
-and cell metadata with donor, cell type, condition and batch columns. Load batches
-with `m3.read_h5ad` (or `m3.read_h5` / `m3.from_anndata`), combine them with `m3.concat`,
-then build and train the model as in the Quickstart. See the
+M3 takes raw counts: one count matrix per modality (RNA and/or ADT and/or ATAC)
+and cell metadata with a batch column and one or two condition columns; the
+donor-level tasks also need donor and cell-type columns. With one `.h5ad` per
+modality, `m3.read_h5ad({"rna": "rna.h5ad", "adt": "adt.h5ad"})` reads every batch
+at once and matches the cells by name (`m3.from_anndata` does the same for AnnData
+in memory), then build and train the model as in the Quickstart. See the
 [documentation](https://pyanglab.github.io/M3/) for the full workflow.
 
 ## Repository layout
