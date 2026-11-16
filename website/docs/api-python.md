@@ -31,18 +31,27 @@ model = m3.M3(data, condition_keys=["cond_group"],      # 2. declare column role
 emb   = model.embedding(part="bio")                     #    read out
 ```
 
-## Capability gating
+## What each read-out needs
 
-`m3` is staged, and which read-outs are available depends on how the model was
-built and trained. Every trained model unlocks the integration-level
-read-outs ([`embedding`](#m3embedding), [`reconstruct`](#m3reconstruct),
-[`generate`](#m3generate), [`augment`](#m3augment)). The donor-level read-outs
-([`predict_donors`](#m3predict_donors), [`donor_embedding`](#m3donor_embedding),
-[`attribute`](#m3attribute)) additionally require the **donor predictor**, which
-trains automatically when both `donor_key` and `celltype_key` were supplied at
-construction (and is skipped when you pass `donor_prediction=False`). Calling a
-read-out before its capability is unlocked raises
-[`m3.M3CapabilityError`](#exceptions). Inspect `model.capabilities` at any time:
+Every trained model gives the cell-level read-outs. The others need more, set
+when the model is built:
+
+| Read-out | Needs |
+|---|---|
+| [`embedding`](#m3embedding), [`reconstruct`](#m3reconstruct), [`generate`](#m3generate) | a trained model |
+| [`augment`](#m3augment) | also `donor_key` |
+| [`predict_donors`](#m3predict_donors), [`donor_embedding`](#m3donor_embedding), [`attribute`](#m3attribute) | also the donor predictor |
+
+The **donor predictor** is the second training stage. `train()` runs it when
+both `donor_key` and `celltype_key` were passed to `m3.M3`, and skips it with
+`donor_prediction=False`. By default `predict_donors` reports the held-out
+donors only, so with nothing held out it returns no rows; pass
+`include_reference=True` for the donors the model trained on.
+
+A read-out called without what it needs raises
+[`m3.M3CapabilityError`](#exceptions), and the message says what is missing.
+`model.capabilities` shows whether the model is trained (`embedding`,
+`reconstruct`) and whether it has the donor predictor (`predict_donors`):
 
 ```python
 model.capabilities
@@ -524,9 +533,9 @@ condition (default `200`; set `0` for the raw `celltypes` table).
 
 ## Exceptions
 
-- `m3.M3CapabilityError` — a read-out was requested before its capability was
-  unlocked (subclasses `RuntimeError`). The message names what is missing and
-  how to obtain it.
+- `m3.M3CapabilityError` — a read-out was called on a model that lacks what it
+  needs, see [What each read-out needs](#what-each-read-out-needs) (subclasses
+  `RuntimeError`). The message names what is missing and how to obtain it.
 
 ---
 

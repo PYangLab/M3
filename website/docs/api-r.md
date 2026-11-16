@@ -46,17 +46,22 @@ model <- m3_train(                                   # 2. declare column roles +
 emb   <- m3_embedding(model, part = "bio")           # 3. read out
 ```
 
-## Capability gating
+## What each read-out needs
 
-Which read-outs are available depends on how the model was trained. Every trained
-model unlocks the integration-level read-outs
-([`m3_embedding()`](#m3_embedding), [`m3_reconstruct()`](#m3_reconstruct),
-[`m3_generate()`](#m3_generate), [`m3_augment()`](#m3_augment)). The donor-level
-read-outs ([`m3_predict_donors()`](#m3_predict_donors),
-[`m3_donor_embedding()`](#m3_donor_embedding), [`m3_attribute()`](#m3_attribute))
-additionally require the **donor predictor**, which trains automatically when both
-`donor_key` and `celltype_key` are supplied (and is skipped with
-`donor_prediction = FALSE`). Inspect with [`m3_capabilities()`](#m3_capabilities):
+Every trained model gives the cell-level read-outs. The others need more, set
+in [`m3_train()`](#m3_train):
+
+| Read-out | Needs |
+|---|---|
+| [`m3_embedding()`](#m3_embedding), [`m3_reconstruct()`](#m3_reconstruct), [`m3_generate()`](#m3_generate) | a trained model |
+| [`m3_augment()`](#m3_augment) | also `donor_key` |
+| [`m3_predict_donors()`](#m3_predict_donors), [`m3_donor_embedding()`](#m3_donor_embedding), [`m3_attribute()`](#m3_attribute) | also the donor predictor |
+
+The **donor predictor** is the second training stage. `m3_train()` runs it when
+both `donor_key` and `celltype_key` are given, and skips it with
+`donor_prediction = FALSE`. [`m3_capabilities()`](#m3_capabilities) shows whether
+the model is trained (`embedding`, `reconstruct`) and whether it has the donor
+predictor (`predict_donors`):
 
 ```r
 m3_capabilities(model)
@@ -275,7 +280,7 @@ Maps to Python `Dataset.modalities[...]`.
 | [`m3_train()`](#m3_train) | train the integration VAE (+ optional donor predictor) |
 | [`m3_attach()`](#m3_attach) | store a trained model inside an SCE / MAE |
 | [`m3_save()`](#m3_save) / [`m3_load()`](#m3_load) | write a trained model to a file / read it back without training |
-| [`m3_capabilities()`](#m3_capabilities) | which read-outs a model unlocks |
+| [`m3_capabilities()`](#m3_capabilities) | whether a model is trained and has the donor predictor |
 | [`m3_reference_vocab()`](#m3_reference_vocab) | leak-safe reference vocabulary the model trained on |
 
 ### `m3_train()`
