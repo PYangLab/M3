@@ -59,11 +59,12 @@ single value is accepted.
 Not supported. The model uses the modalities named `rna`, `adt` and `atac`, and
 one with any other name is left out without an error.
 
-### I work in Seurat or SingleCellExperiment
+### My data is a Seurat or SingleCellExperiment object
 
-Use the R package: [Use your own data (R)](notebooks/r_05_own_data.md). With
-Seurat, start the m3 engine before Seurat is loaded, as shown there; in the
-other order R can crash with a segmentation fault.
+Write each modality to its own `.h5ad` in R, for example with the Bioconductor
+package zellkonverter, then continue in Python with
+[Use your own data](notebooks/py_05_own_data.ipynb#seurat-or-singlecellexperiment),
+which shows the conversion for both object types.
 
 ## Training and results
 
@@ -76,10 +77,10 @@ present.
 ### How do I know training has run long enough?
 
 Training prints the validation loss after every epoch, and `max_epochs` sets the
-number of epochs (default 300). An epoch on a small dataset has fewer update
-steps than one on a large dataset, so after the same number of epochs a small
-dataset is further from convergence: on the 3,000-cell demo the loss is still
-falling steeply at epoch 300.
+number of epochs (default 300). The number of update steps is the number of
+epochs times the number of mini-batches per epoch, so with fewer cells the same
+number of epochs gives fewer steps. If the validation loss is still falling at
+the last epoch, raise `max_epochs`.
 
 ### The embedding has 28 columns, not 30
 
