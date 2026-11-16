@@ -34,15 +34,16 @@ def read_matrix(
     counts: dict,
     obs: pd.DataFrame,
     var: dict,
-    batch: str = "batch0",
+    batch: str | None = None,
 ) -> Dataset:
-    """Build a single-batch Dataset from in-memory per-modality count arrays.
+    """Build a Dataset from in-memory per-modality count arrays.
 
     counts: {modality -> array/sparse [n_cells, n_features]} RAW counts
     obs:    DataFrame [n_cells, ...]
     var:    {modality -> list/Index of feature names}
-    batch: label written to obs['batch'] for a single-batch input; ignored if
-           obs already carries a 'batch' column (multi-batch data brings its own)
+    batch:  when all cells are one batch, its label; written to obs['batch'].
+            Leave it out when obs has a column that identifies the batches, and
+            name that column as batch_key when building the model.
     """
     if not counts:
         raise ValueError("counts must contain at least one modality.")
@@ -68,7 +69,13 @@ def read_matrix(
         var_out[name] = names
         present[name] = np.ones(n, dtype=bool)
     obs_out = obs.reset_index(drop=True).copy()
-    if "batch" not in obs_out.columns:
+    # No label is invented here: which cells form a batch is the user's to say,
+    # either with this label or with batch_key when the model is built.
+    if batch is not None:
+        if "batch" in obs_out.columns and not (obs_out["batch"].astype(str) == str(batch)).all():
+            raise ValueError(
+                f"obs already has a 'batch' column, and its values differ from batch={batch!r}. "
+                "Leave out batch= to use the column, or drop the column to use the label.")
         obs_out["batch"] = batch
     return Dataset(modalities=modalities, obs=obs_out, var=var_out, present=present)
 
@@ -80,8 +87,8 @@ _FEATURE_TYPE_TO_MODALITY = {
 }
 
 
-def from_anndata(adata, *, batch: str = "batch0", modality: str = "rna") -> Dataset:
-    """Build a single-batch Dataset from an in-memory AnnData.
+def from_anndata(adata, *, batch: str | None = None, modality: str = "rna") -> Dataset:
+    """Build a Dataset from an in-memory AnnData.
 
     If adata.var has a 'feature_types' column, the matrix is split into modalities;
     otherwise the whole matrix becomes the single modality `modality` (default 'rna').
@@ -116,7 +123,7 @@ def from_anndata(adata, *, batch: str = "batch0", modality: str = "rna") -> Data
     return read_matrix(counts=counts, obs=obs, var=var, batch=batch)
 
 
-def read_h5ad(path: str, *, batch: str = "batch0", modality: str = "rna") -> Dataset:
+def read_h5ad(path: str, *, batch: str | None = None, modality: str = "rna") -> Dataset:
     """Read one batch from an AnnData .h5ad file (thin shim over from_anndata)."""
     return from_anndata(_ad.read_h5ad(path), batch=batch, modality=modality)
 
@@ -161,7 +168,7 @@ def read_h5(
     adt: str | None = None,
     atac: str | None = None,
     metadata: str,
-    batch: str = "batch0",
+    batch: str | None = None,
 ) -> Dataset:
     """Read one batch from paper-format HDF5 count matrices + a metadata CSV."""
     obs = pd.read_csv(metadata)

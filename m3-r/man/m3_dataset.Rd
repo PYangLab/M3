@@ -6,7 +6,7 @@
 \usage{
 m3_dataset(
   x,
-  batch = "batch0",
+  batch = NULL,
   assay = "counts",
   adt_exp = "ADT",
   atac_exp = "ATAC",
@@ -18,7 +18,10 @@ m3_dataset(
 \link[MultiAssayExperiment]{MultiAssayExperiment}, Seurat object, or a list
 with elements \code{rna}/\code{adt}/\code{atac} (features x cells) + \code{obs}.}
 
-\item{batch}{batch label written to \code{obs$batch}.}
+\item{batch}{when all cells are one batch, its label, written to
+\code{obs$batch}. Leave it \code{NULL} when the metadata has a column that
+identifies the batches. It is an error if the metadata already has a
+\code{batch} column with other values.}
 
 \item{assay, adt_exp, atac_exp}{assay / altExp selectors for SCE input.}
 
@@ -29,14 +32,16 @@ an \code{m3_dataset}.
 }
 \description{
 RNA raw counts in the main assay, ADT/ATAC as altExps; the role columns
-(condition / cell type / donor / batch) live in \code{colData}. A single
-batch label is stamped on \code{obs$batch}; use \code{\link{m3_concat}} to
-combine batches.
+(condition / cell type / donor / batch) live in \code{colData}. The batches
+are read from the metadata column named by \code{batch_key} in
+\code{\link{m3_train}} (default \code{"batch"}); no batch is made up when
+there is none. Use \code{\link{m3_concat}} to combine batches that were
+built separately.
 }
 \examples{
 \donttest{
   sce <- m3_example_sce()
-  data <- m3_dataset(sce, batch = "batch1")
+  data <- m3_dataset(sce)
   data
 }
 }

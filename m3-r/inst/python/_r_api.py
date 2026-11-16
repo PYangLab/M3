@@ -81,8 +81,13 @@ def seed(s) -> None:
 
 
 # --------------------------------------------------------------- datasets
-def dataset_from_parts(counts: dict, obs, var: dict, batch: str) -> int:
-    """Build a single-batch Dataset.
+def _label(batch):
+    """R sends no batch as a missing argument; pass that on as None."""
+    return None if batch is None else str(batch)
+
+
+def dataset_from_parts(counts: dict, obs, var: dict, batch=None) -> int:
+    """Build a Dataset.
 
     counts: {mod -> 2D float array [cells, feats]} (RAW counts, cells x features)
     obs:    a pandas DataFrame (reticulate converts the R data.frame) or a dict
@@ -92,19 +97,19 @@ def dataset_from_parts(counts: dict, obs, var: dict, batch: str) -> int:
     counts = {k: np.asarray(v, dtype=np.float32) for k, v in counts.items()}
     var = {k: [str(x) for x in v] for k, v in var.items()}
     obs = pd.DataFrame(obs).reset_index(drop=True)
-    return _put(m3.read_matrix(counts=counts, obs=obs, var=var, batch=str(batch)))
+    return _put(m3.read_matrix(counts=counts, obs=obs, var=var, batch=_label(batch)))
 
 
-def dataset_read_h5(rna=None, adt=None, atac=None, metadata=None, batch="batch0") -> int:
+def dataset_read_h5(rna=None, adt=None, atac=None, metadata=None, batch=None) -> int:
     def n(x):
         return None if (x is None or x == "") else str(x)
     ds = m3.read_h5(rna=n(rna), adt=n(adt), atac=n(atac),
-                    metadata=str(metadata), batch=str(batch))
+                    metadata=str(metadata), batch=_label(batch))
     return _put(ds)
 
 
-def dataset_read_h5ad(path, batch="batch0", modality="rna") -> int:
-    return _put(m3.read_h5ad(str(path), batch=str(batch), modality=str(modality)))
+def dataset_read_h5ad(path, batch=None, modality="rna") -> int:
+    return _put(m3.read_h5ad(str(path), batch=_label(batch), modality=str(modality)))
 
 
 def dataset_concat(handles) -> int:

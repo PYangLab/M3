@@ -56,12 +56,20 @@ model.capabilities
 All readers return a [`Dataset`](#the-dataset-container) holding **raw counts**.
 m3 normalises internally, so do **not** pre–log-normalise the input.
 
+**Batches.** The model reads the batches from the `obs` column named by
+`batch_key` in [`m3.M3`](#m3m3) (default `"batch"`). The readers do not make up a
+batch: when `obs` has no `batch` column, the printed `Dataset` shows
+`batches=not set`, and `m3.M3` raises an error unless `batch_key` names the
+column to use. `batch="name"` on a reader is for input that is one batch: it
+writes that label to `obs["batch"]`, and raises an error if `obs` already has a
+`batch` column with other values.
+
 ### `m3.read_h5`
 
 ```python
 m3.read_h5(*, rna: str | None = None, adt: str | None = None,
            atac: str | None = None, metadata: str,
-           batch: str = "batch0") -> Dataset
+           batch: str | None = None) -> Dataset
 ```
 
 Read one batch from paper-format HDF5 count matrices plus a metadata CSV. Pass
@@ -72,7 +80,7 @@ features×cells) is resolved automatically against the feature count.
 ### `m3.read_h5ad`
 
 ```python
-m3.read_h5ad(path: str, *, batch: str = "batch0",
+m3.read_h5ad(path: str, *, batch: str | None = None,
              modality: str = "rna") -> Dataset
 ```
 
@@ -83,7 +91,7 @@ into modalities; otherwise the whole matrix is taken as `modality`.
 ### `m3.from_anndata`
 
 ```python
-m3.from_anndata(adata, *, batch: str = "batch0",
+m3.from_anndata(adata, *, batch: str | None = None,
                 modality: str = "rna") -> Dataset
 ```
 
@@ -94,7 +102,7 @@ behaves as in [`read_h5ad`](#m3read_h5ad).
 
 ```python
 m3.read_matrix(*, counts: dict, obs: 'pd.DataFrame', var: dict,
-               batch: str = "batch0") -> Dataset
+               batch: str | None = None) -> Dataset
 ```
 
 Build one batch from in-memory per-modality count arrays.
@@ -109,10 +117,12 @@ Build one batch from in-memory per-modality count arrays.
 m3.concat(datasets: 'list[Dataset]') -> Dataset
 ```
 
-Stack single-batch `Dataset`s into one multi-batch `Dataset`. Features per
+Stack `Dataset`s into one multi-batch `Dataset`. Features per
 modality are harmonised by **name intersection** (the first batch's order is
 kept); a batch missing a whole modality is zero-filled and flagged in
-`present` (mosaic design). Batch labels must be unique across inputs.
+`present` (mosaic design). The inputs either all have a `batch` column, with
+labels unique across inputs, or none has one; in the second case `batch_key` in
+[`m3.M3`](#m3m3) names the column that identifies the batches.
 
 ### `m3.datasets.liu_demo`
 
@@ -221,8 +231,8 @@ Nothing is trained yet — call [`train`](#m3train).
 | `condition_keys` | one or more `obs` columns the model is made aware of; each gets its own latent factor. m3 is condition-aware, so this is required. |
 | `target_condition` | the single condition used for prediction / attribution (defaults to the first of `condition_keys`). |
 | `donor_key` | `obs` column identifying a donor/sample. Required for donor-level prediction, attribution, and `augment`. |
-| `celltype_key` | `obs` column with cell-type labels. Required for [`train`](#m3train). |
-| `batch_key` | `obs` column with the batch label (default `"batch"`, written by every reader). It is the integration / held-out unit, the *site* the donor adversary removes, and the stratifier for [`augment(batch=...)`](#m3augment). After training, `cell_metadata["batch"]` holds this column's values. A single-batch dataset trains without batch correction and warns. |
+| `celltype_key` | `obs` column with cell-type labels. Needed for the donor predictor, attribution and [`augment`](#m3augment). The cell-level model does not use it, so an embedding needs only `condition_keys` and the batch column. |
+| `batch_key` | `obs` column with the batch label (default `"batch"`). An error is raised when `obs` has no such column. It is the integration / held-out unit, the *site* the donor adversary removes, and the stratifier for [`augment(batch=...)`](#m3augment). After training, `cell_metadata["batch"]` holds this column's values. A single-batch dataset trains without batch correction and warns. The cells of one batch must all have the same modalities, so with a mosaic dataset the batches have to follow the pieces passed to [`m3.concat`](#m3concat). |
 | `held_out` | batch label(s) to hold out as an unlabelled **query** set — their `target_condition` labels are masked during training and recovered by [`predict_donors`](#m3predict_donors). |
 | `held_out_samples` | donor/sample ID(s) to hold out as the **query** set instead of a whole batch — may span batches; requires `donor_key` and is mutually exclusive with `held_out`. Their `target_condition` labels are masked during training and recovered by [`predict_donors`](#m3predict_donors). |
 | `hvg` | `{modality -> n_top}` highly-variable-feature selection, e.g. `{"rna": 1000}`. Omit to use all features as given. |

@@ -41,10 +41,13 @@ accepts (SCE / MAE / Seurat / list), converted automatically.}
 first of \code{condition_keys}).}
 
 \item{celltype_key, donor_key, batch_key}{role columns in \code{obs}. The donor
-predictor + attribution need \code{donor_key} + \code{celltype_key};
+predictor + attribution need \code{donor_key} + \code{celltype_key}; the
+Stage-1 model uses neither, so an embedding needs only the condition and
+batch columns.
 \code{batch_key} (default \code{"batch"}) is the obs column identifying
 batches — both the held-out/integration unit and the site the donor
-adversary removes.}
+adversary removes. Training stops with an error when that column is
+missing.}
 
 \item{held_out}{character vector of batch labels to hold out (leak-safe).}
 

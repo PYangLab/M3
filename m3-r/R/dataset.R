@@ -13,25 +13,30 @@ new_m3_dataset <- function(handle, info, device = "auto") {
 #' Build an m3 dataset from a SingleCellExperiment / MultiAssayExperiment / list.
 #'
 #' RNA raw counts in the main assay, ADT/ATAC as altExps; the role columns
-#' (condition / cell type / donor / batch) live in \code{colData}. A single
-#' batch label is stamped on \code{obs$batch}; use \code{\link{m3_concat}} to
-#' combine batches.
+#' (condition / cell type / donor / batch) live in \code{colData}. The batches
+#' are read from the metadata column named by \code{batch_key} in
+#' \code{\link{m3_train}} (default \code{"batch"}); no batch is made up when
+#' there is none. Use \code{\link{m3_concat}} to combine batches that were
+#' built separately.
 #'
 #' @param x a \link[SingleCellExperiment]{SingleCellExperiment},
 #'   \link[MultiAssayExperiment]{MultiAssayExperiment}, Seurat object, or a list
 #'   with elements \code{rna}/\code{adt}/\code{atac} (features x cells) + \code{obs}.
-#' @param batch batch label written to \code{obs$batch}.
+#' @param batch when all cells are one batch, its label, written to
+#'   \code{obs$batch}. Leave it \code{NULL} when the metadata has a column that
+#'   identifies the batches. It is an error if the metadata already has a
+#'   \code{batch} column with other values.
 #' @param assay,adt_exp,atac_exp assay / altExp selectors for SCE input.
 #' @param device one of "auto", "cpu", "cuda" (session device, set on first use).
 #' @return an \code{m3_dataset}.
 #' @examples
 #' \donttest{
 #'   sce <- m3_example_sce()
-#'   data <- m3_dataset(sce, batch = "batch1")
+#'   data <- m3_dataset(sce)
 #'   data
 #' }
 #' @export
-m3_dataset <- function(x, batch = "batch0", assay = "counts",
+m3_dataset <- function(x, batch = NULL, assay = "counts",
                        adt_exp = "ADT", atac_exp = "ATAC",
                        device = c("auto", "cpu", "cuda")) {
   device <- match.arg(device)
@@ -50,7 +55,8 @@ m3_dataset <- function(x, batch = "batch0", assay = "counts",
 #'
 #' @param rna,adt,atac paths to per-modality \code{.h5} files (adt/atac optional).
 #' @param metadata path to the per-cell metadata \code{.csv}.
-#' @param batch batch label written to \code{obs$batch}.
+#' @param batch the label of this batch, written to \code{obs$batch}; see
+#'   \code{\link{m3_dataset}}.
 #' @param device session device (see \code{\link{m3_dataset}}).
 #' @return an \code{m3_dataset}.
 #' @examples
@@ -60,7 +66,7 @@ m3_dataset <- function(x, batch = "batch0", assay = "counts",
 #' }
 #' @export
 m3_read_h5 <- function(rna = NULL, adt = NULL, atac = NULL, metadata,
-                       batch = "batch0", device = c("auto", "cpu", "cuda")) {
+                       batch = NULL, device = c("auto", "cpu", "cuda")) {
   device <- match.arg(device)
   abs <- function(p) if (is.null(p)) NULL else normalizePath(p, mustWork = TRUE)
   h <- .m3_call("dataset_read_h5", rna = abs(rna), adt = abs(adt), atac = abs(atac),
@@ -71,12 +77,13 @@ m3_read_h5 <- function(rna = NULL, adt = NULL, atac = NULL, metadata,
 #' Read one batch from an AnnData \code{.h5ad} file.
 #'
 #' @param path path to the \code{.h5ad}.
-#' @param batch batch label.
+#' @param batch the label of this batch, written to \code{obs$batch}; see
+#'   \code{\link{m3_dataset}}.
 #' @param modality modality name used when \code{var} has no \code{feature_types}.
 #' @param device session device.
 #' @return an \code{m3_dataset}.
 #' @export
-m3_read_h5ad <- function(path, batch = "batch0", modality = "rna",
+m3_read_h5ad <- function(path, batch = NULL, modality = "rna",
                          device = c("auto", "cpu", "cuda")) {
   device <- match.arg(device)
   h <- .m3_call("dataset_read_h5ad", path = normalizePath(path, mustWork = TRUE),
@@ -84,10 +91,13 @@ m3_read_h5ad <- function(path, batch = "batch0", modality = "rna",
   new_m3_dataset(h, .dataset_info(h), device)
 }
 
-#' Combine single-batch datasets into one multi-batch dataset.
+#' Combine datasets into one multi-batch dataset.
 #'
 #' Features per modality are harmonised by name intersection (first batch's
-#' order); batch labels must be unique. Mirrors \code{m3.concat}.
+#' order). The datasets either all have a \code{batch} column, with labels
+#' unique across inputs, or none has one; in the second case \code{batch_key}
+#' in \code{\link{m3_train}} names the column that identifies the batches.
+#' Mirrors \code{m3.concat}.
 #'
 #' @param datasets a list of \code{m3_dataset}s.
 #' @return an \code{m3_dataset}.
@@ -170,7 +180,8 @@ print.m3_dataset <- function(x, ...) {
   i <- x$info
   mods <- paste(vapply(i$modalities, function(m) paste0(m, ":", i$n_features[[m]]), ""),
                 collapse = ", ")
-  cat("m3_dataset(n_cells=", i$n_cells, ", batches=[",
-      paste(i$batches, collapse = ", "), "], modalities=[", mods, "])\n", sep = "")
+  batches <- if (length(i$batches)) paste0("[", paste(i$batches, collapse = ", "), "]") else "not set"
+  cat("m3_dataset(n_cells=", i$n_cells, ", batches=", batches,
+      ", modalities=[", mods, "])\n", sep = "")
   invisible(x)
 }

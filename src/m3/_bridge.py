@@ -33,6 +33,26 @@ def _write_paper_h5(path: str, counts_cells_by_features, feature_names) -> None:
         g.create_dataset("features", data=np.array([str(x) for x in feature_names], dtype="S"))
 
 
+def check_batch_modalities(dataset, batch_key: str = "batch") -> None:
+    """Raise unless the cells of each batch all have the same modalities.
+
+    The engine reads one file per batch and modality, so ``marshal`` writes a
+    modality for a whole batch as soon as any of its cells has it. In a batch
+    that mixes cells with and without the modality, the zero-filled rows of the
+    cells without it would be passed on as measured counts.
+    """
+    labels = dataset.obs["batch"].to_numpy()
+    for mod, has in dataset.present.items():
+        for label in dataset.batches:
+            rows = labels == label
+            n_has, n = int(has[rows].sum()), int(rows.sum())
+            if 0 < n_has < n:
+                raise ValueError(
+                    f"batch '{label}' (batch_key='{batch_key}') has {mod} for {n_has} of {n} "
+                    "cells. The cells of one batch must all have the same modalities; "
+                    "use a batch column that follows the pieces passed to m3.concat.")
+
+
 def marshal(dataset, tmpdir: str | None = None) -> dict:
     """Write a Dataset to temp paper-format h5 + metadata CSVs.
 
