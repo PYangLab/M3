@@ -49,8 +49,10 @@ def check_batch_modalities(dataset, batch_key: str = "batch") -> None:
             if 0 < n_has < n:
                 raise ValueError(
                     f"batch '{label}' (batch_key='{batch_key}') has {mod} for {n_has} of {n} "
-                    "cells. The cells of one batch must all have the same modalities; "
-                    "use a batch column that follows the pieces passed to m3.concat.")
+                    f"cells. The cells of one batch must all have the same modalities: keep "
+                    f"only the cells of this batch that have {mod}, or leave {mod} out for the "
+                    "whole batch. If batch_key names a column that cuts across the pieces "
+                    "combined with m3.concat, use one that follows them.")
 
 
 def marshal(dataset, tmpdir: str | None = None) -> dict:

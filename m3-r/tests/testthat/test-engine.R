@@ -161,3 +161,44 @@ test_that("the cell-level model trains without cell-type labels", {
   expect_false(m3_capabilities(m)[["predict_donors"]])
   expect_false(any(startsWith(colnames(m3_cell_metadata(m)), "__m3")))
 })
+
+test_that("m3_read_h5ad takes one file per modality and matches cells by name", {
+  skip_if_no_engine()
+  on.exit(m3_shutdown(), add = TRUE)
+
+  dir <- tempfile("m3_h5ad_")
+  dir.create(dir)
+  # write rna.h5ad (batches B1, B2) and adt.h5ad (B1 only, rows shuffled) with the
+  # worker's own anndata, so the test needs no R-side h5ad writer
+  code <- sprintf('
+import anndata as ad, numpy as np, pandas as pd
+names = [f"c{i}-{b}" for b in ("B1", "B2") for i in range(20)]
+obs = pd.DataFrame({"batch": [n.split("-")[1] for n in names],
+                    "cond": ["hc", "dis"] * 20}, index=names)
+rna = ad.AnnData(np.arange(40 * 5, dtype=np.float32).reshape(40, 5), obs=obs,
+                 var=pd.DataFrame(index=[f"g{j}" for j in range(5)]))
+adt = rna[rna.obs["batch"] == "B1", :2].copy()
+adt.var_names = ["p0", "p1"]
+adt = adt[np.random.default_rng(0).permutation(adt.n_obs)].copy()
+rna.write_h5ad(r"%s/rna.h5ad"); adt.write_h5ad(r"%s/adt.h5ad")
+', dir, dir)
+  .m3_proc("cpu")
+  if (identical(.m3_runtime$mode, "reticulate")) {
+    reticulate::py_run_string(code)
+  } else {
+    basilisk::basiliskRun(.m3_runtime$proc, function(code) {
+      reticulate::py_run_string(code); NULL }, code = code)
+  }
+
+  d <- m3_read_h5ad(list(rna = file.path(dir, "rna.h5ad"), adt = file.path(dir, "adt.h5ad")),
+                    device = "cpu")
+  expect_output(print(d), "batches=[B1, B2]", fixed = TRUE)
+  obs <- m3_dataset_obs(d)
+  adt <- m3_dataset_matrix(d, "adt")
+  i <- which(obs$obs_names == "c7-B1")
+  expect_equal(unname(adt[i, ]), c(35, 36))               # paired by name, not by row
+  expect_true(all(adt[obs$batch == "B2", ] == 0))
+
+  expect_error(m3_read_h5ad(c(file.path(dir, "rna.h5ad"), file.path(dir, "adt.h5ad")),
+                            device = "cpu"), "named list")
+})

@@ -17,31 +17,44 @@ column. The "Use your own data" tutorial goes from files or objects to a trained
 
 ### My RNA and ADT (or ATAC) are in separate files
 
-Read both, keep the shared cells in one order, and pass one matrix per modality
-to [`m3.read_matrix`](api-python.md#m3read_matrix) (Python) or
-[`m3_dataset()`](api-r.md#m3_dataset) (R). See
-[Use your own data](notebooks/py_05_own_data.ipynb). MuData works the same way:
-pass `mdata["rna"].X` and the other modalities to `read_matrix`.
+Pass one file per modality:
+`m3.read_h5ad({"rna": "rna.h5ad", "adt": "adt.h5ad"})` in Python
+([`m3.read_h5ad`](api-python.md#m3read_h5ad)) or
+`m3_read_h5ad(list(rna = "rna.h5ad", adt = "adt.h5ad"))` in R. For AnnData
+objects already in memory, use [`m3.from_anndata`](api-python.md#m3from_anndata)
+the same way. The cells are matched by name, so the files may order them
+differently; within a batch, both files must have the same cells. See
+[Use your own data](notebooks/py_05_own_data.ipynb).
+
+A MuData can be passed as `m3.from_anndata(mdata.mod)`. Only the `obs` of each
+modality is read, not the joint `mdata.obs`, so the batch and condition columns
+must be in the modalities' `obs`.
 
 ### My batch column is not called `batch`
 
 Leave it as it is and name it when you build the model: `batch_key="run"` in
 [`m3.M3`](api-python.md#m3m3) or [`m3_train()`](api-r.md#m3_train). Until then
 the printed dataset shows `batches=not set`. A model built without a batch
-column stops with an error that lists the columns to choose from.
+column stops with an error that lists the columns to choose from. When reading
+one file per modality, pass the same `batch_key="run"` to `read_h5ad` /
+`from_anndata` as well.
 
 ### My batches do not all measure the same modalities
 
-Build each batch with the modalities it has and stack them with
-[`m3.concat`](api-python.md#m3concat) / [`m3_concat()`](api-r.md#m3_concat). See
-[Mosaic integration](notebooks/py_06_mosaic_integration.ipynb), or section 5 of
-[Use your own data (R)](notebooks/r_05_own_data.md).
+Pass one file per modality, each holding only the cells measured for it, as in
+the entry above: a cell missing from a file is marked as not measured for that
+modality. See [Mosaic integration](notebooks/py_06_mosaic_integration.ipynb).
+In R, `m3_read_h5ad()` takes the same named list; section 5 of
+[Use your own data (R)](notebooks/r_05_own_data.md) shows how to stack batches
+built from in-memory objects with [`m3_concat()`](api-r.md#m3_concat).
 
 ### My `.X` is normalised
 
-M3 needs raw counts and warns when it finds non-integer values. If the counts
-are in a layer, pass the layer instead of `.X`, as in
-[Use your own data](notebooks/py_05_own_data.ipynb).
+M3 needs raw counts. Reading one file per modality stops at non-integer
+values; a single file or a matrix gives a warning. If the counts are in a layer,
+pass `layer="counts"` to [`read_h5ad`](api-python.md#m3read_h5ad) /
+[`from_anndata`](api-python.md#m3from_anndata), or
+`layer={"rna": "counts"}` for one modality only.
 
 ### I have no cell-type labels
 
