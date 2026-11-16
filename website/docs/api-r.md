@@ -298,7 +298,7 @@ given — the Stage-2 adversarial donor-level disease predictor on top. With
 | `data` | an `m3_dataset`, or any input `m3_dataset()` accepts (SCE / MAE / Seurat / list), converted automatically. |
 | `condition_keys` | character vector of condition columns in `obs` *(required)*; each gets its own latent factor. |
 | `target_condition` | the condition to predict / attribute (default: the first of `condition_keys`). |
-| `celltype_key` | cell-type role column; the donor predictor + attribution need `donor_key` + `celltype_key` (default `NULL`). |
+| `celltype_key` | cell-type role column; the donor predictor, attribution and `m3_augment()` need `donor_key` + `celltype_key` (default `NULL`). The cell-level model does not use it, so an embedding needs only `condition_keys` and the batch column. |
 | `donor_key` | donor/sample role column; needed by the donor predictor + attribution (default `NULL`). |
 | `batch_key` | batch role column (effective default `"batch"`); the held-out / integration unit and the site the donor adversary removes. Training stops with an error when the metadata has no such column. The cells of one batch must all have the same modalities. After training, the `batch` column of `m3_cell_metadata()` holds this column's values. |
 | `held_out` | character vector of batch labels to hold out as an unlabelled query set (default `NULL`). |

@@ -37,6 +37,13 @@ _MODALITY_ORDER = ("rna", "adt", "atac")
 # the read-outs describe (a batch-grouped, possibly subsampled and permuted set)
 # can be traced back to the Dataset. Removed again before train() returns.
 _ROW = "__m3_row__"
+# The engine's Stage-1 run takes a cell-type column, computes a classification
+# loss on it and leaves that loss out of the objective, so the labels cannot
+# change the trained model. They can break it, though: the classifier head has a
+# fixed width of 50, and a 51st cell type is an out-of-range target. Stage 1 is
+# therefore given this constant column in place of the user's labels, which also
+# makes cell-type labels optional for it.
+_CTY = "__m3_celltype__"
 
 # Bumped whenever the layout of a saved model file changes incompatibly.
 _FORMAT = "m3-model"
@@ -259,13 +266,10 @@ class M3:
         """
         from m3._engine.run_M3 import run_M3_update_no_classify, run_M3_update_with_query
 
-        if self.celltype_key is None:
-            raise ValueError("celltype_key is currently required for train().")
-
         want_donor = donor_prediction
         if want_donor is None:
             want_donor = bool(self.donor_key and self.celltype_key)
-        if want_donor and not self.donor_key:
+        if want_donor and not (self.donor_key and self.celltype_key):
             raise ValueError("donor prediction / attribution needs donor_key + celltype_key.")
 
         # Start from a clean slate, so nothing of an earlier train() (a donor
@@ -310,7 +314,7 @@ class M3:
 
         out = run_fn(
             mp["rna"], mp["adt"], mp["atac"], marshalled["metadata_paths"], save_path,
-            self.condition_keys, self.celltype_key, batch_size, lr, max_epochs,
+            self.condition_keys, _CTY, batch_size, lr, max_epochs,
             min_delta, early_stop_patience, val_percentage, hvg_num,
             weight_modality, weight_batch_ae, self.embedding_dim,
             train_idx, select_test, balance_batches, **extra,
@@ -326,7 +330,7 @@ class M3:
         if balance_batches and not use_query:
             full_out = run_fn(
                 mp["rna"], mp["adt"], mp["atac"], marshalled["metadata_paths"], save_path,
-                self.condition_keys, self.celltype_key, batch_size, lr, 0,
+                self.condition_keys, _CTY, batch_size, lr, 0,
                 min_delta, early_stop_patience, val_percentage, hvg_num,
                 weight_modality, weight_batch_ae, self.embedding_dim,
                 train_idx, select_test, False,
@@ -353,6 +357,7 @@ class M3:
             self._all_metadata = ref_metadata.reset_index(drop=True)
 
         self._all_rows = self._all_metadata.pop(_ROW).to_numpy(dtype=np.int64)
+        self._all_metadata = self._all_metadata.drop(columns=_CTY)
         self._all_data = self._all_data.to(self._device)
         self._all_b = self._all_b.to(self._device).long()
         self._all_mask_poe = self._all_mask_poe.to(self._device)
@@ -370,11 +375,13 @@ class M3:
     # ------------------------------------------------- engine-side data
     def _engine_dataset(self):
         """The Dataset as it is handed to the engine: held-out cells' missing
-        condition labels filled in, and every cell tagged with its row."""
+        condition labels filled in, every cell tagged with its row, and the
+        constant cell-type column Stage 1 is run on (see ``_CTY``)."""
         import dataclasses
         obs = self.dataset.obs
-        if _ROW in obs.columns:
-            raise ValueError(f"obs column '{_ROW}' is reserved by m3; rename it.")
+        for reserved in (_ROW, _CTY):
+            if reserved in obs.columns:
+                raise ValueError(f"obs column '{reserved}' is reserved by m3; rename it.")
         if self._query_cells.any() and any(
                 obs.loc[self._query_cells, k].isna().any() for k in self.condition_keys):
             # Held-out cells' condition labels are masked in training anyway; fill
@@ -387,7 +394,7 @@ class M3:
                 col[self._query_cells & obs[k].isna().to_numpy()] = ph
                 obs[k] = col
         return dataclasses.replace(
-            self.dataset, obs=obs.assign(**{_ROW: np.arange(obs.shape[0])}))
+            self.dataset, obs=obs.assign(**{_ROW: np.arange(obs.shape[0]), _CTY: "all"}))
 
     def _assemble(self, rows, n_ref: int):
         """Rebuild the read-out tensors and metadata for Dataset rows ``rows``
@@ -440,7 +447,7 @@ class M3:
             data = torch.cat([data, q_data], dim=0)
             mask = torch.cat([mask, q_mask], dim=0)
             b = torch.cat([b.reshape(-1), q_b.reshape(-1)], dim=0)
-        metadata = label.iloc[sel].reset_index(drop=True).drop(columns=_ROW)
+        metadata = label.iloc[sel].reset_index(drop=True).drop(columns=[_ROW, _CTY])
         return data.to(dev), b.to(dev).long(), mask.to(dev), metadata
 
     # ---------------------------------------------- Stage-2 donor predictor
@@ -827,9 +834,11 @@ class M3:
         if not self.capabilities["embedding"]:
             raise M3CapabilityError("generate requires train(); call train() first.")
         from m3._engine.simulation import synthesize_per_class
+        # per_class=-1 resamples every cell once; the engine still reads a
+        # cell-type column, whose labels then play no part.
         x = synthesize_per_class(
-            self._generator, self._all_data, self._all_metadata, self._all_b,
-            self._all_mask_poe, self.celltype_key, per_class=-1, tau=tau,
+            self._generator, self._all_data, self._all_metadata.assign(**{_CTY: "all"}),
+            self._all_b, self._all_mask_poe, _CTY, per_class=-1, tau=tau,
             device=str(self._device), seed=seed)
         arr = x.numpy() if hasattr(x, "numpy") else np.asarray(x)
         splits = list(self._generator.encoder.feature_splits)
@@ -856,6 +865,10 @@ class M3:
         if self.donor_key is None:
             raise M3CapabilityError(
                 "augment requires donor_key at construction (it resamples donor templates).")
+        if self.celltype_key is None:
+            raise M3CapabilityError(
+                "augment requires celltype_key at construction (it resamples each "
+                "donor's cells per cell type).")
         conditions, n_donors = list(conditions), list(n_donors)
         if len(conditions) != len(n_donors):
             raise ValueError(
@@ -1161,8 +1174,9 @@ class M3:
                 f"load(path, dataset) needs the m3 Dataset the model was trained on, not "
                 f"a {type(dataset).__name__}; build it the way it was built before "
                 "training (m3.read_h5ad, m3.from_anndata, m3.read_matrix, ...).")
-        if _ROW in dataset.obs.columns:
-            raise ValueError(f"obs column '{_ROW}' is reserved by m3; rename it.")
+        for reserved in (_ROW, _CTY):
+            if reserved in dataset.obs.columns:
+                raise ValueError(f"obs column '{reserved}' is reserved by m3; rename it.")
 
         def unreadable(why):
             return ValueError(f"{path} is not a readable m3 model file ({why}).")
