@@ -76,11 +76,14 @@ nav:
           - Patient prediction: notebooks/py_02_patient_prediction.ipynb
           - Feature attribution: notebooks/py_03_attribution.ipynb
           - Data augmentation: notebooks/py_04_augmentation.ipynb
+          - Use your own data: notebooks/py_05_own_data.ipynb
+          - Mosaic integration: notebooks/py_06_mosaic_integration.ipynb
       - R:
           - Representation learning: notebooks/r_01_representation_learning.md
           - Patient prediction: notebooks/r_02_patient_prediction.md
           - Feature attribution: notebooks/r_03_attribution.md
           - Data augmentation: notebooks/r_04_augmentation.md
+          - Use your own data: notebooks/r_05_own_data.md
   - How M3 works: overview.md
   - API reference:
       - Python: api-python.md

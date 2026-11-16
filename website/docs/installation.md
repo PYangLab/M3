@@ -123,8 +123,8 @@ and ROC curves with `scanpy`, `umap-learn` and `matplotlib`. All three arrive wi
 python -c "import m3; print(m3.__version__)"
 ```
 
-Expected output: the installed version string (e.g. `0.3.0`). If a version
-prints, the API is reachable.
+Expected output: the installed version number. If a version prints, the API is
+reachable.
 
 The demo dataset used throughout the tutorials is **built into the wheel** — no
 download or preprocessing step:
@@ -180,12 +180,15 @@ See the [R tutorials](notebooks/r_01_representation_learning.md) and the
 ## Input data format
 
 M3 takes **raw counts** — it normalises internally, so do **not** pre–log-normalise.
-Each batch is a multimodal table (RNA and/or ADT and/or ATAC) plus per-cell
-metadata with at least a **donor / sample** column, a **cell-type** column, a
-**condition / phenotype** column, and a **batch** column. Load batches with
-[`m3.read_h5`](api-python.md#m3read_h5), [`m3.read_h5ad`](api-python.md#m3read_h5ad), or
-[`m3.from_anndata`](api-python.md#m3from_anndata), and combine them with
-[`m3.concat`](api-python.md#m3concat). See the [API reference](api-python.md) for exact signatures.
+The input is one count matrix per modality (RNA and/or ADT and/or ATAC) plus
+per-cell metadata with a **batch** column and a **condition / phenotype** column.
+The donor-level tasks also need a **cell-type** column and a
+**donor / sample** column. Read the data with
+[`m3.read_h5`](api-python.md#m3read_h5), [`m3.read_h5ad`](api-python.md#m3read_h5ad),
+[`m3.from_anndata`](api-python.md#m3from_anndata) or
+[`m3.read_matrix`](api-python.md#m3read_matrix); batches that are read separately
+are combined with [`m3.concat`](api-python.md#m3concat). See the [API reference](api-python.md) for exact signatures,
+and [Use your own data](notebooks/py_05_own_data.ipynb) for a worked example.
 
 ---
 

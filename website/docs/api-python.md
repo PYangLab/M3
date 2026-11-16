@@ -31,18 +31,27 @@ model = m3.M3(data, condition_keys=["cond_group"],      # 2. declare column role
 emb   = model.embedding(part="bio")                     #    read out
 ```
 
-## Capability gating
+## What each read-out needs
 
-`m3` is staged, and which read-outs are available depends on how the model was
-built and trained. Every trained model unlocks the integration-level
-read-outs ([`embedding`](#m3embedding), [`reconstruct`](#m3reconstruct),
-[`generate`](#m3generate), [`augment`](#m3augment)). The donor-level read-outs
-([`predict_donors`](#m3predict_donors), [`donor_embedding`](#m3donor_embedding),
-[`attribute`](#m3attribute)) additionally require the **donor predictor**, which
-trains automatically when both `donor_key` and `celltype_key` were supplied at
-construction (and is skipped when you pass `donor_prediction=False`). Calling a
-read-out before its capability is unlocked raises
-[`m3.M3CapabilityError`](#exceptions). Inspect `model.capabilities` at any time:
+Every trained model gives the cell-level read-outs. The others need more, set
+when the model is built:
+
+| Read-out | Needs |
+|---|---|
+| [`embedding`](#m3embedding), [`reconstruct`](#m3reconstruct), [`generate`](#m3generate) | a trained model; a condition and a batch column are enough |
+| [`augment`](#m3augment) | also `donor_key` and `celltype_key` |
+| [`predict_donors`](#m3predict_donors), [`donor_embedding`](#m3donor_embedding), [`attribute`](#m3attribute) | also the donor predictor |
+
+The **donor predictor** is the second training stage. `train()` runs it when
+both `donor_key` and `celltype_key` were passed to `m3.M3`, and skips it with
+`donor_prediction=False`. By default `predict_donors` reports the held-out
+donors only, so with nothing held out it returns no rows; pass
+`include_reference=True` for the donors the model trained on.
+
+A read-out called without what it needs raises
+[`m3.M3CapabilityError`](#exceptions), and the message says what is missing.
+`model.capabilities` shows whether the model is trained (`embedding`,
+`reconstruct`) and whether it has the donor predictor (`predict_donors`):
 
 ```python
 model.capabilities
@@ -55,6 +64,10 @@ model.capabilities
 
 All readers return a [`Dataset`](#the-dataset-container) holding **raw counts**.
 m3 normalises internally, so do **not** pre–log-normalise the input.
+
+The model uses the modalities named `rna`, `adt` and `atac`; a modality with any
+other name is left out. For a walk-through from files on disk, see
+[Use your own data](notebooks/py_05_own_data.ipynb).
 
 **Batches.** The model reads the batches from the `obs` column named by
 `batch_key` in [`m3.M3`](#m3m3) (default `"batch"`). The readers do not make up a
@@ -72,7 +85,7 @@ m3.read_h5(*, rna: str | None = None, adt: str | None = None,
            batch: str | None = None) -> Dataset
 ```
 
-Read one batch from paper-format HDF5 count matrices plus a metadata CSV. Pass
+Read paper-format HDF5 count matrices plus a metadata CSV. Pass
 the path to each modality you have (at least one of `rna` / `adt` / `atac`) and
 the per-cell `metadata` CSV. Matrix orientation (cells×features vs.
 features×cells) is resolved automatically against the feature count.
@@ -84,9 +97,10 @@ m3.read_h5ad(path: str, *, batch: str | None = None,
              modality: str = "rna") -> Dataset
 ```
 
-Read one batch from an AnnData `.h5ad`. If `adata.var` has a `feature_types`
+Read an AnnData `.h5ad`. If `adata.var` has a `feature_types`
 column (`Gene Expression` / `Antibody Capture` / `Peaks`), the matrix is split
-into modalities; otherwise the whole matrix is taken as `modality`.
+into modalities; otherwise the whole matrix is taken as `modality`. Counts are
+read from `.X`; the cell names are kept in an `obs_names` column.
 
 ### `m3.from_anndata`
 
@@ -95,7 +109,7 @@ m3.from_anndata(adata, *, batch: str | None = None,
                 modality: str = "rna") -> Dataset
 ```
 
-Build one batch from an in-memory `AnnData`. Splitting by `feature_types`
+Build a `Dataset` from an in-memory `AnnData`. Splitting by `feature_types`
 behaves as in [`read_h5ad`](#m3read_h5ad).
 
 ### `m3.read_matrix`
@@ -105,11 +119,17 @@ m3.read_matrix(*, counts: dict, obs: 'pd.DataFrame', var: dict,
                batch: str | None = None) -> Dataset
 ```
 
-Build one batch from in-memory per-modality count arrays.
+Build a `Dataset` from in-memory per-modality count arrays. This is the reader to
+use when each modality is stored in its own file: read the files, put the cells
+in one order, and pass one matrix per modality
+([example](notebooks/py_05_own_data.ipynb)).
 
 - `counts` — `{modality -> array | sparse}` of raw counts, shape `[n_cells, n_features]`
-- `obs` — per-cell `DataFrame`, `n_cells` rows
+- `obs` — per-cell `DataFrame`, `n_cells` rows, in the same cell order as the
+  matrices. Its index is not kept, so store the cell names in a column.
 - `var` — `{modality -> list/Index}` of feature names, aligned to each matrix's columns
+- `batch` — when all cells are one batch, its label, written to `obs["batch"]`;
+  leave it out when `obs` has a column that identifies the batches
 
 ### `m3.concat`
 
@@ -120,9 +140,11 @@ m3.concat(datasets: 'list[Dataset]') -> Dataset
 Stack `Dataset`s into one multi-batch `Dataset`. Features per
 modality are harmonised by **name intersection** (the first batch's order is
 kept); a batch missing a whole modality is zero-filled and flagged in
-`present` (mosaic design). The inputs either all have a `batch` column, with
-labels unique across inputs, or none has one; in the second case `batch_key` in
-[`m3.M3`](#m3m3) names the column that identifies the batches.
+`present` (mosaic design, see
+[Mosaic integration](notebooks/py_06_mosaic_integration.ipynb)). The inputs
+either all have a `batch` column, with labels unique across inputs, or none has
+one; in the second case `batch_key` in [`m3.M3`](#m3m3) names the column that
+identifies the batches.
 
 ### `m3.datasets.liu_demo`
 
@@ -236,7 +258,7 @@ Nothing is trained yet — call [`train`](#m3train).
 | `held_out` | batch label(s) to hold out as an unlabelled **query** set — their `target_condition` labels are masked during training and recovered by [`predict_donors`](#m3predict_donors). |
 | `held_out_samples` | donor/sample ID(s) to hold out as the **query** set instead of a whole batch — may span batches; requires `donor_key` and is mutually exclusive with `held_out`. Their `target_condition` labels are masked during training and recovered by [`predict_donors`](#m3predict_donors). |
 | `hvg` | `{modality -> n_top}` highly-variable-feature selection, e.g. `{"rna": 1000}`. Omit to use all features as given. |
-| `embedding_dim` | size of the shared biological latent (default `30`). |
+| `embedding_dim` | size of the whole latent (default `30`): the intrinsic factor, then two dimensions per condition, then two for batch. The `"bio"` embedding leaves out the batch factor and so has `embedding_dim - 2` columns. |
 
 After construction, `model.contract` records the frozen roles, including
 `model.contract["reference_vocab"]` (the condition values observed in the
@@ -254,9 +276,11 @@ M3.train(
     min_delta: float = 0.0,
     val_percentage: float = 0.1,
     weight_batch_ae: float = 1.0,
+    weight_modality: dict | list | None = None,
     balance_batches: bool = True,
     donor_prediction: bool | None = None,
     donor_predictor: dict | None = None,
+    seed: int | None = 0,
 ) -> M3
 ```
 
@@ -264,6 +288,15 @@ Train the integration VAE and, when applicable, the donor predictor on top.
 Returns the model (so you can chain `.train()`). Uses CUDA automatically when
 available; otherwise CPU.
 
+- **`max_epochs`**, **`lr`**, **`batch_size`** — training epochs (default
+  `300`), learning rate (default `1e-5`) and batch size (default `256`) of the
+  integration VAE.
+- **`early_stop_patience`**, **`min_delta`** — early-stopping patience in epochs
+  (default `300`) and minimum improvement of the validation loss (default `0`).
+  With the defaults the patience equals `max_epochs`, so training runs all
+  epochs.
+- **`val_percentage`** — fraction of cells held for validation (default `0.1`).
+- **`weight_batch_ae`** — weight of the batch-autoencoder loss (default `1.0`).
 - **`donor_prediction`** — `None` (default) auto-enables the donor predictor
   when `donor_key` and `celltype_key` are set. Pass `False` for pure
   representation learning, `True` to require it.
@@ -271,6 +304,12 @@ available; otherwise CPU.
   batch-balanced subset; with no held-out query, downstream steps are
   automatically rebuilt on the **full** reference so sparse cell types are not
   biased out.
+- **`weight_modality`** — per-modality weights of the reconstruction loss, as a
+  dict keyed by modality name, e.g. `{"rna": 1.0, "atac": 0.2}`. `None` (default)
+  weights every modality equally.
+- **`seed`** — seeds the integration VAE so a run is reproducible (default `0`):
+  the same data in the same cell order, with the same settings and seed, gives
+  an identical result. `None` leaves it unseeded.
 - **`donor_predictor`** — a dict tuning the Stage-2 adversarial corrector.
   Recognised keys (defaults): `enc_lr` (`1e-5`), `glr` (`5e-3`), `n_epochs`
   (`30`), `patient_w` (`3.0`), `adv_max` (`1.0`), `adv_warmup` (`10`), `n_disc`
@@ -339,16 +378,24 @@ position:
 ```python
 emb = pd.DataFrame(model.embedding("intrinsic"),
                    index=model.cell_metadata["obs_names"])
-adata.obsm["X_m3"] = emb.reindex(adata.obs_names).to_numpy()
+adata.obsm["X_m3"] = emb.loc[adata.obs_names].to_numpy()
 ```
 
 `part` selects which factor(s):
 
 - `"bio"` — the intrinsic biological latent plus every condition factor (the
-  integration embedding for clustering / UMAP)
-- `"intrinsic"` — the intrinsic biological latent only
+  integration embedding for clustering / UMAP; cells also separate by condition)
+- `"intrinsic"` — the intrinsic biological latent only (cell types across
+  batches, without the condition differences)
 - `"batch"` — the 2-d batch factor (should carry batch signal, not biology)
 - any name in `condition_keys` — that condition's 2-d factor
+
+| `part` | columns | with `embedding_dim=30`, one condition |
+|---|---|---|
+| `"intrinsic"` | `embedding_dim - 2 - 2 × n_conditions` | 26 |
+| a condition key | 2 | 2 |
+| `"batch"` | 2 | 2 |
+| `"bio"` | intrinsic, then each condition: `embedding_dim - 2` | 28 |
 
 ### `m3.reconstruct`
 
@@ -360,6 +407,12 @@ Posterior-mean decode of every cell, returned as `{modality -> ndarray}`
 (`[n_cells, n_features]`). With `remove_batch=True` (default) the batch factor is
 zeroed before decoding, yielding a batch-corrected matrix suitable for
 cross-batch differential expression.
+
+Rows follow [`cell_metadata`](#m3cell_metadata) and columns follow
+`dataset.var[modality]` (with `hvg=`, only the selected features are returned).
+Values are on the scale the model trains on, not counts:
+`log2(count / size + 1)`, where `size` is the cell's total count in that modality
+divided by the mean total over all cells.
 
 ### `m3.predict_donors`
 
@@ -488,9 +541,9 @@ condition (default `200`; set `0` for the raw `celltypes` table).
 
 ## Exceptions
 
-- `m3.M3CapabilityError` — a read-out was requested before its capability was
-  unlocked (subclasses `RuntimeError`). The message names what is missing and
-  how to obtain it.
+- `m3.M3CapabilityError` — a read-out was called on a model that lacks what it
+  needs, see [What each read-out needs](#what-each-read-out-needs) (subclasses
+  `RuntimeError`). The message names what is missing and how to obtain it.
 
 ---
 
@@ -532,4 +585,6 @@ same engine, so a script translated line-for-line produces identical numbers.
 - **Tutorials** — [Representation learning](notebooks/py_01_representation_learning.ipynb),
   [Patient prediction](notebooks/py_02_patient_prediction.ipynb),
   [Feature attribution](notebooks/py_03_attribution.ipynb),
-  [Data augmentation](notebooks/py_04_augmentation.ipynb).
+  [Data augmentation](notebooks/py_04_augmentation.ipynb),
+  [Use your own data](notebooks/py_05_own_data.ipynb),
+  [Mosaic integration](notebooks/py_06_mosaic_integration.ipynb).

@@ -46,17 +46,22 @@ model <- m3_train(                                   # 2. declare column roles +
 emb   <- m3_embedding(model, part = "bio")           # 3. read out
 ```
 
-## Capability gating
+## What each read-out needs
 
-Which read-outs are available depends on how the model was trained. Every trained
-model unlocks the integration-level read-outs
-([`m3_embedding()`](#m3_embedding), [`m3_reconstruct()`](#m3_reconstruct),
-[`m3_generate()`](#m3_generate), [`m3_augment()`](#m3_augment)). The donor-level
-read-outs ([`m3_predict_donors()`](#m3_predict_donors),
-[`m3_donor_embedding()`](#m3_donor_embedding), [`m3_attribute()`](#m3_attribute))
-additionally require the **donor predictor**, which trains automatically when both
-`donor_key` and `celltype_key` are supplied (and is skipped with
-`donor_prediction = FALSE`). Inspect with [`m3_capabilities()`](#m3_capabilities):
+Every trained model gives the cell-level read-outs. The others need more, set
+in [`m3_train()`](#m3_train):
+
+| Read-out | Needs |
+|---|---|
+| [`m3_embedding()`](#m3_embedding), [`m3_reconstruct()`](#m3_reconstruct), [`m3_generate()`](#m3_generate) | a trained model; a condition and a batch column are enough |
+| [`m3_augment()`](#m3_augment) | also `donor_key` and `celltype_key` |
+| [`m3_predict_donors()`](#m3_predict_donors), [`m3_donor_embedding()`](#m3_donor_embedding), [`m3_attribute()`](#m3_attribute) | also the donor predictor |
+
+The **donor predictor** is the second training stage. `m3_train()` runs it when
+both `donor_key` and `celltype_key` are given, and skips it with
+`donor_prediction = FALSE`. [`m3_capabilities()`](#m3_capabilities) shows whether
+the model is trained (`embedding`, `reconstruct`) and whether it has the donor
+predictor (`predict_donors`):
 
 ```r
 m3_capabilities(model)
@@ -69,16 +74,17 @@ m3_capabilities(model)
 ## Data & inputs
 
 All readers return an `m3_dataset` holding **raw counts** — m3 normalises
-internally, so do **not** pre–log-normalise the input.
+internally, so do **not** pre–log-normalise the input. For a walk-through from
+your own objects, see [Use your own data](notebooks/r_05_own_data.md).
 
 | Function | Description |
 |---|---|
 | [`m3_demo()`](#m3_demo) | load the built-in Liu *et al.* CITE-seq demo dataset |
 | [`m3_demo_model()`](#m3_demo_model) | path of a model trained in advance on the demo |
-| [`m3_read_h5()`](#m3_read_h5) | read one batch from paper-format HDF5 matrices + a metadata CSV |
-| [`m3_read_h5ad()`](#m3_read_h5ad) | read one batch from an AnnData `.h5ad` |
+| [`m3_read_h5()`](#m3_read_h5) | read paper-format HDF5 matrices + a metadata CSV |
+| [`m3_read_h5ad()`](#m3_read_h5ad) | read an AnnData `.h5ad` |
 | [`m3_dataset()`](#m3_dataset) | build a dataset from an SCE / MAE / Seurat / list |
-| [`m3_concat()`](#m3_concat) | combine single-batch datasets into one multi-batch dataset |
+| [`m3_concat()`](#m3_concat) | combine datasets into one multi-batch dataset |
 | [`m3_example_sce()`](#m3_example_sce) | a small synthetic RNA + ADT `SingleCellExperiment` for examples |
 | [`m3_dataset_obs()`](#m3_dataset_obs) | per-cell metadata (obs) of a dataset |
 | [`m3_dataset_matrix()`](#m3_dataset_matrix) | dense count matrix for one modality of a dataset |
@@ -131,7 +137,7 @@ m3_read_h5(rna = NULL, adt = NULL, atac = NULL, metadata,
            batch = NULL, device = c("auto", "cpu", "cuda"))
 ```
 
-Read one batch from paper-format HDF5 count matrices (counts under `matrix/data`,
+Read paper-format HDF5 count matrices (counts under `matrix/data`,
 names under `matrix/features`) plus a per-cell metadata CSV. Big data stays in
 Python.
 
@@ -155,7 +161,7 @@ m3_read_h5ad(path, batch = NULL, modality = "rna",
              device = c("auto", "cpu", "cuda"))
 ```
 
-Read one batch from an AnnData `.h5ad` file. If `var` has a `feature_types`
+Read an AnnData `.h5ad` file. If `var` has a `feature_types`
 column the matrix is split into modalities; otherwise the whole matrix is taken
 as `modality`.
 
@@ -180,6 +186,12 @@ m3_dataset(x, batch = NULL, assay = "counts", adt_exp = "ADT",
 Build an `m3_dataset` from an in-memory object: RNA raw counts in the main assay,
 ADT/ATAC as `altExps`, with the role columns in `colData`. `m3_train()` calls
 this for you, so you can also pass the object straight to `m3_train()`.
+
+For a Seurat object, RNA is read from the raw counts of the default assay, and
+`adt_exp` / `atac_exp` name the protein / ATAC assays; an assay that is not found
+is left out without an error. Start the m3 engine before Seurat is loaded, as in
+[Use your own data](notebooks/r_05_own_data.md); in the other order R can crash
+with `*** caught segfault ***`.
 
 The batches are read from the metadata column named by `batch_key` in
 [`m3_train()`](#m3_train) (default `"batch"`). No batch is made up: when the
@@ -207,10 +219,11 @@ m3_concat(datasets)
 ```
 
 Combine datasets into one multi-batch dataset. Features per modality
-are harmonised by **name intersection** (the first batch's order is kept). The
-datasets either all have a `batch` column, with labels unique across inputs, or
-none has one; in the second case `batch_key` in [`m3_train()`](#m3_train) names
-the column that identifies the batches.
+are harmonised by **name intersection** (the first batch's order is kept); a
+batch missing a whole modality is zero-filled and treated as not measured
+(mosaic design). The datasets either all have a `batch` column, with labels
+unique across inputs, or none has one; in the second case `batch_key` in
+[`m3_train()`](#m3_train) names the column that identifies the batches.
 
 | Parameter | Meaning |
 |---|---|
@@ -272,7 +285,7 @@ Maps to Python `Dataset.modalities[...]`.
 | [`m3_train()`](#m3_train) | train the integration VAE (+ optional donor predictor) |
 | [`m3_attach()`](#m3_attach) | store a trained model inside an SCE / MAE |
 | [`m3_save()`](#m3_save) / [`m3_load()`](#m3_load) | write a trained model to a file / read it back without training |
-| [`m3_capabilities()`](#m3_capabilities) | which read-outs a model unlocks |
+| [`m3_capabilities()`](#m3_capabilities) | whether a model is trained and has the donor predictor |
 | [`m3_reference_vocab()`](#m3_reference_vocab) | leak-safe reference vocabulary the model trained on |
 
 ### `m3_train()`
@@ -304,7 +317,7 @@ given — the Stage-2 adversarial donor-level disease predictor on top. With
 | `held_out` | character vector of batch labels to hold out as an unlabelled query set (default `NULL`). |
 | `held_out_samples` | character vector of donor IDs to hold out as the query set, possibly spanning batches; mutually exclusive with `held_out` (default `NULL`). |
 | `hvg` | optional named list of per-modality HVG counts, e.g. `list(rna = 1000)` (default `NULL` = all features). |
-| `embedding_dim` | latent width (default `30`). |
+| `embedding_dim` | width of the whole latent (default `30`). The last two dimensions are the batch factor, so the `"bio"` embedding has `embedding_dim - 2` columns. |
 | `max_epochs` | Stage-1 max training epochs (default `300`). |
 | `lr` | Stage-1 learning rate (default `1e-5`). |
 | `batch_size` | Stage-1 training batch size (default `256`). |
@@ -457,6 +470,11 @@ Batch-corrected per-modality reconstruction (posterior-mean decode). With
 `remove_batch = TRUE` (default) the batch latent is zeroed before decoding,
 yielding a batch-corrected matrix suitable for cross-batch differential
 expression.
+
+Rows follow [`m3_cell_metadata()`](#m3_cell_metadata) and columns follow the
+dataset's features (the matrices carry no dimnames). Values are on the scale the
+model trains on, not counts: `log2(count / size + 1)`, where `size` is the cell's
+total count in that modality divided by the mean total over all cells.
 
 **Returns:** a named list of numeric matrices (one per modality), cells ×
 features.
@@ -730,4 +748,5 @@ attached via [`m3_attach()`](#m3_attach).
 - **Tutorials** — [Representation learning](notebooks/r_01_representation_learning.md),
   [Patient prediction](notebooks/r_02_patient_prediction.md),
   [Feature attribution](notebooks/r_03_attribution.md),
-  [Data augmentation](notebooks/r_04_augmentation.md).
+  [Data augmentation](notebooks/r_04_augmentation.md),
+  [Use your own data](notebooks/r_05_own_data.md).
