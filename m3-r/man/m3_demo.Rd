@@ -12,10 +12,12 @@ m3_demo(device = c("auto", "cpu", "cuda"), n_cells = NULL)
 \item{n_cells}{load a smaller, fixed subsample of this many cells instead of
 all 30,534, for a quicker run (training time is proportional to the number
 of cells). The same cells are returned on every call, and they are the cells
-Python's \code{m3.datasets.liu_demo(n_cells=)} returns. Each batch
-contributes equally and every cell type of every batch keeps at least 50
-cells (or all it has). Must be between 2,250 and 21,489. \code{NULL} (the
-default) loads the whole demo. Meant for cell-level integration: donor
+Python's \code{m3.datasets.liu_demo(n_cells=)} returns. They come from
+seven well-separated major cell types that every batch has (B_Mem,
+CD4_Mem, CD8_Va7.2, Mono_Classical, Mono_Nonclassical, NK, Plasmablast).
+Each batch contributes equally and each of these types keeps at least 50
+cells in every batch. Must be between 1,050 and 13,329. \code{NULL} (the
+default) loads the whole demo, with all 17 cell types. Meant for cell-level integration: donor
 prediction and attribution need enough cells per donor, so use the whole
 demo there.}
 }

@@ -22,19 +22,28 @@ _FT_TO_MODALITY = {
 }
 
 
-# Fewest cells liu_demo(n_cells=...) keeps per (batch, cell type), so that a rare
-# type is still a visible group in a small subsample rather than a few points.
+# The cell types liu_demo(n_cells=...) keeps: the major types that every batch has
+# and that a model trained on the full demo separates (kNN purity >= 0.59 in its
+# bio embedding). CD8_Mem and T_Vd2 are in every batch too, but overlap the other
+# T cells even on the full demo, and the remaining types are missing from at least
+# one batch. Fixed by hand because the demo file is fixed.
+_SUBSAMPLE_CELLTYPES = ("B_Mem", "CD4_Mem", "CD8_Va7.2", "Mono_Classical",
+                        "Mono_Nonclassical", "NK", "Plasmablast")
+
+# Fewest cells liu_demo(n_cells=...) keeps per (batch, cell type), so that the
+# rarest kept type is still a visible group rather than a few points.
 _MIN_CELLS_PER_TYPE = 50
 
 
 def _subsample_rows(obs: pd.DataFrame, n_cells) -> np.ndarray:
     """Row positions of a deterministic ``n_cells`` subsample of the demo.
 
-    Every batch contributes the same number of cells: m3 trains on a
-    batch-balanced subset by default, so cells beyond the smallest batch's share
-    would be loaded and then left out of training. Within a batch each cell type
-    first gets ``_MIN_CELLS_PER_TYPE`` cells (or all it has), and the rest of the
-    batch's share is split in proportion to what each type has left.
+    Only cells of ``_SUBSAMPLE_CELLTYPES`` are taken. Every batch contributes
+    the same number of cells: m3 trains on a batch-balanced subset by default, so
+    cells beyond the smallest batch's share would be loaded and then left out of
+    training. Within a batch each cell type first gets ``_MIN_CELLS_PER_TYPE``
+    cells, and the rest of the batch's share is split in proportion to what each
+    type has left.
 
     Cells are taken at even spacing through each (batch, cell type) group instead
     of with a random generator. The file's order within a group is already mixed
@@ -51,10 +60,13 @@ def _subsample_rows(obs: pd.DataFrame, n_cells) -> np.ndarray:
     batch = obs["batch"].astype(str).to_numpy()
     celltype = obs["mergedcelltype"].astype(str).to_numpy()
     groups = {
-        b: [np.flatnonzero((batch == b) & (celltype == t))
-            for t in sorted(set(celltype[batch == b]))]
+        b: [np.flatnonzero((batch == b) & (celltype == t)) for t in _SUBSAMPLE_CELLTYPES]
         for b in sorted(set(batch))
     }
+    empty = [(b, t) for b, gs in groups.items() for t, g in zip(_SUBSAMPLE_CELLTYPES, gs) if not len(g)]
+    if empty:
+        raise ValueError(f"liu_demo.h5ad has no cells for (batch, cell type) {empty}; "
+                         "package data is corrupt.")
     minimum = {b: sum(min(len(g), _MIN_CELLS_PER_TYPE) for g in gs) for b, gs in groups.items()}
     available = {b: sum(len(g) for g in gs) for b, gs in groups.items()}
     lowest = len(groups) * max(minimum.values())
@@ -63,8 +75,8 @@ def _subsample_rows(obs: pd.DataFrame, n_cells) -> np.ndarray:
         raise ValueError(
             f"n_cells must be between {lowest} and {highest} for this demo, got {n}. "
             f"It takes the same number of cells from each of the {len(groups)} batches, "
-            f"and the smallest batch has {min(available.values())}. Omit n_cells to "
-            f"load all {len(obs)} cells."
+            f"from {len(_SUBSAMPLE_CELLTYPES)} cell types, of which the smallest batch has "
+            f"{min(available.values())} cells. Omit n_cells to load all {len(obs)} cells."
         )
 
     share, extra = divmod(n, len(groups))
@@ -98,10 +110,13 @@ def liu_demo(n_cells: int | None = None) -> Dataset:
     n_cells
         Load a smaller, fixed subsample of this many cells instead of all of
         them, for a quicker run: training time is proportional to the number of
-        cells. The same cells are returned on every call. Each batch contributes
-        equally, and every cell type of every batch keeps at least 50 cells (or
-        all it has), so no cell type is lost. Must be between 2,250 and 21,489.
-        ``None`` (the default) loads all 30,534 cells.
+        cells. The same cells are returned on every call. The subsample holds
+        seven well-separated major cell types that every batch has: B_Mem,
+        CD4_Mem, CD8_Va7.2, Mono_Classical, Mono_Nonclassical, NK and
+        Plasmablast. Each batch contributes equally, and each of these types
+        keeps at least 50 cells in every batch. Must be between 1,050 and
+        13,329. ``None`` (the default) loads all 30,534 cells, with all 17
+        cell types.
 
         This is meant for cell-level integration. Donor-level prediction and
         attribution need enough cells per donor, so use the full demo there.
@@ -189,6 +204,11 @@ def liu_demo(n_cells: int | None = None) -> Dataset:
         modalities = {m: x[rows] for m, x in modalities.items()}
         present = {m: p[rows] for m, p in present.items()}
         obs = obs.iloc[rows].reset_index(drop=True)
+        # A category the subsample has no cell of would still show up, with 0
+        # cells, in value_counts() and in plot legends.
+        for col in obs.columns:
+            if isinstance(obs[col].dtype, pd.CategoricalDtype):
+                obs[col] = obs[col].cat.remove_unused_categories()
     return Dataset(modalities=modalities, obs=obs, var=var, present=present)
 
 

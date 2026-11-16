@@ -32,17 +32,16 @@ The relevant `obs` columns are `cond_group` (`HC` / `Severe`),
 
 ## 1. Representation learning
 
-Build a model by declaring which `obs` columns play which role, then train. For
-pure embedding, switch the donor predictor off.
+Build a model by declaring which `obs` columns play which role, then train. The
+batches come from the `batch` column, and no cell-type labels are needed.
 
 ```python
 model = m3.M3(
     data,
     condition_keys=["cond_group", "Age_interval"],
-    celltype_key="mergedcelltype",
     embedding_dim=30,
 )
-model.train(max_epochs=500, donor_prediction=False)
+model.train(max_epochs=500)
 
 emb = model.embedding(part="bio")        # (n_cells, d) condition-aware embedding
 meta = model.cell_metadata               # row-aligned metadata
