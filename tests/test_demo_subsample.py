@@ -47,11 +47,11 @@ def test_n_cells_draws_the_same_number_of_cells_from_every_batch(n_cells):
         "B1": n_cells // 3, "B2": n_cells // 3, "B3": n_cells // 3}
 
 
-MAJOR = {"B_Mem", "CD4_Mem", "CD8_Va7.2", "Mono_Classical", "Mono_Nonclassical", "NK", "Plasmablast"}
+MAJOR = {"B_Mem", "CD4_Mem", "Mono_Classical", "Mono_Nonclassical", "NK", "Plasmablast"}
 
 
 @pytest.mark.parametrize("n_cells", [3000, 6000])
-def test_n_cells_keeps_the_seven_major_types_in_every_batch(n_cells):
+def test_n_cells_keeps_the_six_major_types_in_every_batch(n_cells):
     data = m3.datasets.liu_demo(n_cells=n_cells)
 
     kept = data.obs.groupby(["batch", "mergedcelltype"], observed=True).size()
@@ -69,7 +69,7 @@ def test_n_cells_drops_the_categories_it_has_no_cells_of():
             assert (obs[col].value_counts() > 0).all(), col
 
 
-def test_the_seven_major_types_are_in_every_batch_of_the_full_demo(full):
+def test_the_six_major_types_are_in_every_batch_of_the_full_demo(full):
     per_batch = full.obs.groupby("batch", observed=True)["mergedcelltype"].agg(set)
     assert all(MAJOR <= types for types in per_batch)
 
@@ -100,7 +100,7 @@ def test_omitting_n_cells_still_returns_the_whole_demo(full):
 @pytest.mark.parametrize("n_cells", [0, -5, 300, 25000, 30534, 10**6])
 def test_n_cells_outside_the_supported_range_is_refused(n_cells):
     # 300 cannot hold the per-cell-type minimum; 25,000 needs 8,334 cells from B1,
-    # which has 4,443 of the seven kept types.
+    # which has 4,359 of the six kept types.
     with pytest.raises(ValueError, match="n_cells must be between"):
         m3.datasets.liu_demo(n_cells=n_cells)
 
