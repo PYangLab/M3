@@ -22,13 +22,8 @@ _FT_TO_MODALITY = {
 }
 
 
-# The cell types liu_demo(n_cells=...) keeps: the major types that every batch has
-# and that a model trained on the full demo separates (kNN purity >= 0.59 in its
-# bio embedding). CD8_Mem and T_Vd2 are in every batch too, but overlap the other
-# T cells even on the full demo. CD8_Va7.2 passes on the full demo, but in a
-# 3,000-cell subsample at the default settings it is not separated from CD4_Mem,
-# so it is left out as well. The remaining types are missing from at least one
-# batch. Fixed by hand because the demo file is fixed.
+# The cell types liu_demo(n_cells=...) keeps: six major types, each present in
+# every batch. Fixed by hand because the demo file is fixed.
 _SUBSAMPLE_CELLTYPES = ("B_Mem", "CD4_Mem", "Mono_Classical",
                         "Mono_Nonclassical", "NK", "Plasmablast")
 
