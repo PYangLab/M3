@@ -2,7 +2,7 @@
 
 The goal: turn raw, multi-batch, multi-modal single-cell data into one clean **embedding**, a handful of coordinates per cell that mix the batches together while keeping the biology, so you can cluster and analyze all your data as one.
 
-This runs on the built-in **Liu et al.** COVID-19 subsample (~30k cells, 3 batches, RNA + ADT).
+This runs on **3,000 cells of the built-in Liu et al. COVID-19 subsample** (3 batches, RNA + ADT, six major cell types), with the same settings as a full-data run.
 
 ``` r
 library(m3)
@@ -11,75 +11,70 @@ set.seed(0)
 
 ## 1. Load the demo dataset
 
-`m3_demo()` returns a ready-to-use `m3_dataset`, a subsample of the Liu et al. COVID-19 CITE-seq data (RNA + ADT), with the obs columns already set up.
+`m3_demo()` returns a ready-to-use `m3_dataset`, a subsample of the Liu et al. COVID-19 CITE-seq data (RNA + ADT), with the obs columns already set up. `n_cells = 3000` loads a fixed 3,000 of its cells, the same number from each batch; leave it out to load all of them.
 
 ``` r
-data <- m3_demo()
+data <- m3_demo(n_cells = 3000)
 data
-#> m3_dataset(n_cells=30534, batches=[B1, B2, B3], modalities=[rna:1000, adt:192])
+#> m3_dataset(n_cells=3000, batches=[B1, B2, B3], modalities=[rna:1000, adt:192])
 ```
 
 ## 2. Build and train the model
 
 `m3_train(...)` sets up the model from your data and fits it, telling it which obs columns to use:
 
-- `condition_keys`, the conditions you're comparing across (here disease group + age band).
-- `celltype_key`, the column holding cell-type labels.
-- `batch_key`, the column marking which batch each cell is from (B1/B2/B3). The model corrects for batch, so cells group by biology rather than by batch.
+- `condition_keys`, the conditions you’re comparing across (here disease group + age band).
 - `embedding_dim`, how many numbers describe each cell in the output (here 30).
 
-`donor_prediction = FALSE` fits only the integration model and skips the disease-prediction step (not needed for embeddings, and faster). `seed = 0` makes the run reproducible. Afterwards `m3_capabilities(model)` shows which outputs are available.
+The batches are read from the obs column `batch` (B1/B2/B3); if yours has another name, pass it as `batch_key =`. The model corrects for batch, so cells group by biology rather than by batch. Cell-type labels are not used in training; they are used below only to colour the UMAP. `seed = 0` makes the run reproducible. Afterwards `m3_capabilities(model)` shows which outputs are available.
 
 ``` r
 #To save time, users can set max_epochs to 100 for test.
 model <- m3_train(
   data,
   condition_keys = c("cond_group", "Age_interval"),
-  celltype_key   = "mergedcelltype",
-  batch_key      = "batch",
   embedding_dim  = 30L,
-  donor_prediction = FALSE,
   max_epochs = 500L,
   seed = 0L
 )
 #> Using 'matrix/data'
-#> torch.Size([1000, 7163])
+#> torch.Size([1000, 1000])
 #> Using 'matrix/data'
-#> torch.Size([1000, 10789])
+#> torch.Size([1000, 1000])
 #> Using 'matrix/data'
-#> torch.Size([1000, 12582])
+#> torch.Size([1000, 1000])
 #> Using 'matrix/data'
-#> torch.Size([192, 7163])
+#> torch.Size([192, 1000])
 #> Using 'matrix/data'
-#> torch.Size([192, 10789])
+#> torch.Size([192, 1000])
 #> Using 'matrix/data'
-#> torch.Size([192, 12582])
-#> Batch counts: {0: 7163, 1: 10789, 2: 12582}
-#> Minimum batch size: 7163
-#> Epoch 1, Validation Loss: 5.1807
-#> Epoch 2, Validation Loss: 5.1167
-#> Epoch 3, Validation Loss: 5.0486
+#> torch.Size([192, 1000])
+#> Batch counts: {np.int64(0): np.int64(1000), np.int64(1): np.int64(1000), np.int64(2): np.int64(1000)}
+#> Minimum batch size: 1000
+#> Epoch 1, Validation Loss: 5.1192
+#> Epoch 2, Validation Loss: 5.1053
+#> Epoch 3, Validation Loss: 5.0906
 #> ...  (494 epochs omitted)  ...
-#> Epoch 498, Validation Loss: 0.5032
-#> Epoch 499, Validation Loss: 0.5039
-#> Epoch 500, Validation Loss: 0.5011
+#> Epoch 498, Validation Loss: 1.8830
+#> Epoch 499, Validation Loss: 1.8635
+#> Epoch 500, Validation Loss: 1.8846
 #> Using 'matrix/data'
-#> torch.Size([1000, 7163])
+#> torch.Size([1000, 1000])
 #> Using 'matrix/data'
-#> torch.Size([1000, 10789])
+#> torch.Size([1000, 1000])
 #> Using 'matrix/data'
-#> torch.Size([1000, 12582])
+#> torch.Size([1000, 1000])
 #> Using 'matrix/data'
-#> torch.Size([192, 7163])
+#> torch.Size([192, 1000])
 #> Using 'matrix/data'
-#> torch.Size([192, 10789])
+#> torch.Size([192, 1000])
 #> Using 'matrix/data'
-#> torch.Size([192, 12582])
+#> torch.Size([192, 1000])
 model
 #> m3_model
 #>   modalities     : rna, adt (embedding_dim=30)
 #>   condition keys : cond_group, Age_interval  (target: cond_group)
-#>   roles          : celltype=mergedcelltype  donor=-  batch=batch
+#>   roles          : celltype=-  donor=-  batch=batch
 #>   capabilities   : embedding, reconstruct
 m3_capabilities(model)
 #>      embedding    reconstruct predict_donors 
@@ -104,7 +99,7 @@ cat(sprintf("bio: %s | intrinsic: %s | batch: %s\n",
             paste(dim(emb_bio), collapse = "x"),
             paste(dim(emb_intrinsic), collapse = "x"),
             paste(dim(emb_batch), collapse = "x")))
-#> bio: 30534x28 | intrinsic: 30534x24 | batch: 30534x2
+#> bio: 3000x28 | intrinsic: 3000x24 | batch: 3000x2
 ```
 
 ## 4. Save the embedding + metadata
@@ -144,18 +139,18 @@ plt <- function(colour, title, legend = TRUE) {
 print(plt("celltype",  "Cell type (biology preserved)"))
 ```
 
-<img src="../r_01_representation_learning_media/dba482b006a975e8e0a61155ffd05c8c04f35ff9.png" width="1536" />
+<img src="../r_01_representation_learning_media/a989a2aa6db833a0917ff0228e98faf1f4d207a8.png" width="1536" />
 
 ``` r
 print(plt("batch",     "Batch (batch mixed)"))
 ```
 
-<img src="../r_01_representation_learning_media/172904583ccd9f0b8084d9782089b26d6bcf352d.png" width="1536" />
+<img src="../r_01_representation_learning_media/73a225edb8b429260e8da5bce3de44bd4ab6699c.png" width="1536" />
 
 ``` r
 print(plt("condition", "Condition"))
 ```
 
-<img src="../r_01_representation_learning_media/f958d3366ee290d0aad44b119a0823511cc7a2ed.png" width="1536" />
+<img src="../r_01_representation_learning_media/177c0441dad199f85eee317c3ffecca992f3b75d.png" width="1536" />
 
 **Done.** You now have an integrated cell embedding, ready for clustering and downstream analysis. The patient-prediction tutorial builds on the same model to predict donor-level disease status.
