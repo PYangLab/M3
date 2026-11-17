@@ -102,7 +102,8 @@ def _counts_of(adata, layer, mod: str):
     if name not in adata.layers:
         raise ValueError(
             f"{mod}: the AnnData has no layer {name!r} (layers: "
-            f"{', '.join(adata.layers.keys()) or 'none'}). Leave layer= out to use .X.")
+            f"{', '.join(str(k) for k in adata.layers.keys() if k is not None) or 'none'}). "
+            "Leave layer= out to use .X.")
     return adata.layers[name]
 
 
