@@ -202,3 +202,16 @@ rna.write_h5ad(r"%s/rna.h5ad"); adt.write_h5ad(r"%s/adt.h5ad")
   expect_error(m3_read_h5ad(c(file.path(dir, "rna.h5ad"), file.path(dir, "adt.h5ad")),
                             device = "cpu"), "named list")
 })
+
+test_that("m3_umap runs both methods inside the R process", {
+  skip_if_no_engine()
+  on.exit(m3_shutdown(), add = TRUE)
+  # On macOS the scanpy method segfaulted R under numba's default threading-layer
+  # selection (see _r_api.py); a regression ends the test run, it does not fail quietly.
+  x <- matrix(stats::rnorm(300 * 10), 300)
+  for (method in c("scanpy", "umap")) {
+    xy <- m3_umap(x, method = method, n_neighbors = 10L, device = "cpu")
+    expect_equal(dim(xy), c(300L, 2L))
+    expect_true(all(is.finite(xy)))
+  }
+})

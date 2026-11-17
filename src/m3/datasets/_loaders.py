@@ -22,12 +22,9 @@ _FT_TO_MODALITY = {
 }
 
 
-# The cell types liu_demo(n_cells=...) keeps: the major types that every batch has
-# and that a model trained on the full demo separates (kNN purity >= 0.59 in its
-# bio embedding). CD8_Mem and T_Vd2 are in every batch too, but overlap the other
-# T cells even on the full demo, and the remaining types are missing from at least
-# one batch. Fixed by hand because the demo file is fixed.
-_SUBSAMPLE_CELLTYPES = ("B_Mem", "CD4_Mem", "CD8_Va7.2", "Mono_Classical",
+# The cell types liu_demo(n_cells=...) keeps: six major types, each present in
+# every batch. Fixed by hand because the demo file is fixed.
+_SUBSAMPLE_CELLTYPES = ("B_Mem", "CD4_Mem", "Mono_Classical",
                         "Mono_Nonclassical", "NK", "Plasmablast")
 
 # Fewest cells liu_demo(n_cells=...) keeps per (batch, cell type), so that the
@@ -111,11 +108,10 @@ def liu_demo(n_cells: int | None = None) -> Dataset:
         Load a smaller, fixed subsample of this many cells instead of all of
         them, for a quicker run: training time is proportional to the number of
         cells. The same cells are returned on every call. The subsample holds
-        seven well-separated major cell types that every batch has: B_Mem,
-        CD4_Mem, CD8_Va7.2, Mono_Classical, Mono_Nonclassical, NK and
-        Plasmablast. Each batch contributes equally, and each of these types
-        keeps at least 50 cells in every batch. Must be between 1,050 and
-        13,329. ``None`` (the default) loads all 30,534 cells, with all 17
+        six major cell types that every batch has: B_Mem, CD4_Mem,
+        Mono_Classical, Mono_Nonclassical, NK and Plasmablast. Each batch
+        contributes equally, and each of these types keeps at least 50 cells
+        in every batch. Must be between 900 and 13,077. ``None`` (the default) loads all 30,534 cells, with all 17
         cell types.
 
         This is meant for cell-level integration. Donor-level prediction and

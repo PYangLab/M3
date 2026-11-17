@@ -22,7 +22,16 @@ from __future__ import annotations
 import contextlib
 import os
 import shutil
+import sys
 import tempfile
+
+# Inside an R process on macOS, numba's default threading-layer selection
+# segfaults R at the first numba-parallel call (m3_umap(method = "scanpy")); with
+# the workqueue layer it does not. Outside R, numba picks workqueue there anyway.
+# numba reads this when it is imported, so it must be set before m3 / scanpy load.
+# Linux does not crash, so its default is left alone; an explicit setting wins.
+if sys.platform == "darwin":
+    os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
 
 import numpy as np
 import pandas as pd

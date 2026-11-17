@@ -99,11 +99,11 @@ Load the built-in **Liu et al.** COVID-19 demo — the same stratified subsample
 (RNA HVGs + ADT, 3 batches `B1`/`B2`/`B3`) the Python package ships, so demo
 results match exactly.
 
-`n_cells` loads a smaller, fixed subsample of that many cells (1,050 to 13,329)
+`n_cells` loads a smaller, fixed subsample of that many cells (900 to 13,077)
 for a quicker run, e.g. `m3_demo(n_cells = 6000)`; `NULL` loads all 30,534. It
 returns the same cells as Python's `liu_demo(n_cells=)`: equal numbers from each
-batch, from seven well-separated major cell types that every batch has (B_Mem,
-CD4_Mem, CD8_Va7.2, Mono_Classical, Mono_Nonclassical, NK, Plasmablast), each
+batch, from six major cell types that every batch has (B_Mem, CD4_Mem,
+Mono_Classical, Mono_Nonclassical, NK, Plasmablast), each
 keeping at least 50 cells in every batch. Use the full demo for donor-level prediction and attribution.
 
 **Returns:** an `m3_dataset`.
