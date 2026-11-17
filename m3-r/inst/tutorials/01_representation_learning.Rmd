@@ -48,24 +48,19 @@ obs columns to use:
 
 - `condition_keys`, the conditions you're comparing across (here disease group +
   age band).
-- `celltype_key`, the column holding cell-type labels.
-- `batch_key`, the column marking which batch each cell is from (B1/B2/B3). The
-  model corrects for batch, so cells group by biology rather than by batch.
 - `embedding_dim`, how many numbers describe each cell in the output (here 30).
 
-`donor_prediction = FALSE` fits only the integration model and skips the
-disease-prediction step (not needed for embeddings, and faster). `seed = 0`
-makes the run reproducible. Afterwards `m3_capabilities(model)` shows which
+The batches are read from the obs column `batch` (B1/B2/B3); if yours has another
+name, pass it as `batch_key =`. The model corrects for batch, so cells group by
+biology rather than by batch. Cell-type labels are not used in training; they are
+used below only to colour the UMAP. `seed = 0` makes the run reproducible. Afterwards `m3_capabilities(model)` shows which
 outputs are available.
 
 ```{r train}
 model <- m3_train(
   data,
   condition_keys = c("cond_group", "Age_interval"),
-  celltype_key   = "mergedcelltype",
-  batch_key      = "batch",
   embedding_dim  = 30L,
-  donor_prediction = FALSE,
   max_epochs = 500L,
   seed = 0L
 )

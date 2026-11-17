@@ -2,22 +2,37 @@
 % Please edit documentation in R/dataset.R
 \name{m3_read_h5ad}
 \alias{m3_read_h5ad}
-\title{Read one batch from an AnnData \code{.h5ad} file.}
+\title{Read AnnData \code{.h5ad} file(s).}
 \usage{
 m3_read_h5ad(
   path,
   batch = NULL,
   modality = "rna",
+  batch_key = "batch",
+  layer = NULL,
+  join = c("exact", "inner"),
   device = c("auto", "cpu", "cuda")
 )
 }
 \arguments{
-\item{path}{path to the \code{.h5ad}.}
+\item{path}{path to one \code{.h5ad}, or a named list of paths, one per
+modality.}
 
-\item{batch}{the label of this batch, written to \code{obs$batch}; see
-\code{\link{m3_dataset}}.}
+\item{batch}{when all cells are one batch, its label, written to
+\code{obs$batch}; see \code{\link{m3_dataset}}.}
 
-\item{modality}{modality name used when \code{var} has no \code{feature_types}.}
+\item{modality}{modality name used for a single file whose \code{var} has
+no \code{feature_types}.}
+
+\item{batch_key}{with one file per modality, the \code{obs} column that
+identifies the batches.}
+
+\item{layer}{where the raw counts are, if not in \code{X}: a layer name, or
+(with one file per modality) a named list of layer names.}
+
+\item{join}{with one file per modality: \code{"exact"} (every modality of a
+batch has the same cells, else an error) or \code{"inner"} (keep the cells
+every modality of the batch has, and report the others).}
 
 \item{device}{session device.}
 }
@@ -25,5 +40,17 @@ m3_read_h5ad(
 an \code{m3_dataset}.
 }
 \description{
-Read one batch from an AnnData \code{.h5ad} file.
+Mirrors \code{m3.read_h5ad} in Python. Give one file, or one file per
+modality as a named list, e.g. \code{list(rna = "rna.h5ad", adt = "adt.h5ad")}.
+With one file per modality, the cells are matched by name and a cell missing
+from a modality is marked as not measured for it. Each file's \code{obs}
+needs the batch column (\code{batch_key}), and within a batch every modality
+must have the same cells, or none of them; this is checked from \code{obs}
+before any counts are loaded. Prints the number of cells per batch and
+modality.
+}
+\examples{
+\donttest{
+  data <- m3_read_h5ad(list(rna = "rna.h5ad", adt = "adt.h5ad"))
+}
 }

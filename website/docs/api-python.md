@@ -93,24 +93,62 @@ features×cells) is resolved automatically against the feature count.
 ### `m3.read_h5ad`
 
 ```python
-m3.read_h5ad(path: str, *, batch: str | None = None,
-             modality: str = "rna") -> Dataset
+m3.read_h5ad(path: str | dict[str, str], *, batch: str | None = None,
+             modality: str = "rna", batch_key: str = "batch",
+             layer: str | dict[str, str] | None = None,
+             join: str = "exact") -> Dataset
 ```
 
-Read an AnnData `.h5ad`. If `adata.var` has a `feature_types`
-column (`Gene Expression` / `Antibody Capture` / `Peaks`), the matrix is split
-into modalities; otherwise the whole matrix is taken as `modality`. Counts are
-read from `.X`; the cell names are kept in an `obs_names` column.
+Read AnnData `.h5ad` file(s): one file, or one file per modality as a dict,
+e.g. `{"rna": "rna.h5ad", "adt": "adt.h5ad"}`.
+
+**One file per modality.** The cells are matched by name, and a cell missing
+from a file is marked as not measured for that modality (a mosaic design, see
+[Mosaic integration](notebooks/py_06_mosaic_integration.ipynb)). Before any
+counts are loaded, the files are checked from their `obs` alone:
+
+- every file's `obs` has the batch column, `batch_key`;
+- cell names are unique within each file, and the files agree on the batch of
+  each cell;
+- within a batch, every modality has the same cells, or none of them. With
+  `join="inner"`, the cells that not every modality of their batch has are left
+  out instead, and their number is printed.
+
+Then the counts must be whole numbers (an error otherwise), no modality may be
+all zero for a whole batch, and `obs` columns that several files share must
+agree. The other `obs` columns of every file are kept. The number of cells per
+batch and modality is printed.
+
+**One file.** If `adata.var` has a `feature_types` column (`Gene Expression` /
+`Antibody Capture` / `Peaks`), the matrix is split into modalities; otherwise
+the whole matrix is taken as `modality`. Non-integer counts give a warning.
+
+In both cases the cell names are kept, unchanged, in an `obs_names` column.
+
+- `batch` — when all cells are one batch, its label, written to `obs["batch"]`
+- `batch_key` — with one file per modality, the `obs` column that identifies the
+  batches
+- `layer` — where the raw counts are, if not in `.X`: a layer name, or
+  `{modality: layer name}` for some modalities only
+- `join` — `"exact"` or `"inner"`, see above
 
 ### `m3.from_anndata`
 
 ```python
-m3.from_anndata(adata, *, batch: str | None = None,
-                modality: str = "rna") -> Dataset
+m3.from_anndata(adata: AnnData | dict[str, AnnData], *, batch: str | None = None,
+                modality: str = "rna", batch_key: str = "batch",
+                layer: str | dict[str, str] | None = None,
+                join: str = "exact") -> Dataset
 ```
 
-Build a `Dataset` from an in-memory `AnnData`. Splitting by `feature_types`
-behaves as in [`read_h5ad`](#m3read_h5ad).
+Build a `Dataset` from in-memory `AnnData`: one object, or one per modality as a
+dict such as `{"rna": rna, "adt": adt}`. Behaves as
+[`read_h5ad`](#m3read_h5ad). Per-batch files are combined per modality with
+anndata first, e.g.
+`ad.concat(pieces, label="batch", keys=batch_names, index_unique="-")`, which
+adds the batch column and keeps barcodes that repeat across batches distinct. A
+MuData can be passed as `m3.from_anndata(mdata.mod)`; the joint `mdata.obs` is
+not read.
 
 ### `m3.read_matrix`
 
@@ -119,10 +157,11 @@ m3.read_matrix(*, counts: dict, obs: 'pd.DataFrame', var: dict,
                batch: str | None = None) -> Dataset
 ```
 
-Build a `Dataset` from in-memory per-modality count arrays. This is the reader to
-use when each modality is stored in its own file: read the files, put the cells
-in one order, and pass one matrix per modality
-([example](notebooks/py_05_own_data.ipynb)).
+Build a `Dataset` from in-memory per-modality count arrays that are already in
+one cell order. The rows of the matrices and of `obs` are matched by position,
+not by name; for files or AnnData objects,
+[`read_h5ad`](#m3read_h5ad) / [`from_anndata`](#m3from_anndata) match the cells
+by name and check them.
 
 - `counts` — `{modality -> array | sparse}` of raw counts, shape `[n_cells, n_features]`
 - `obs` — per-cell `DataFrame`, `n_cells` rows, in the same cell order as the
@@ -137,7 +176,9 @@ in one order, and pass one matrix per modality
 m3.concat(datasets: 'list[Dataset]') -> Dataset
 ```
 
-Stack `Dataset`s into one multi-batch `Dataset`. Features per
+Stack `Dataset`s that were built separately into one multi-batch `Dataset`
+(one file or AnnData per modality, read with [`read_h5ad`](#m3read_h5ad), needs no
+`concat`). Features per
 modality are harmonised by **name intersection** (the first batch's order is
 kept); a batch missing a whole modality is zero-filled and flagged in
 `present` (mosaic design, see
@@ -166,7 +207,7 @@ Dataset(n_cells=30534, batches=['B1', 'B2', 'B3'], modalities=[rna:1000, adt:192
 `obs` carries the columns `batch` (`B1` / `B2` / `B3`), `sample_id`, `Donor`,
 `cond_group` (`HC` / `Severe`), `Age_interval`, and `mergedcelltype`.
 
-Pass `n_cells` (2,250 to 21,489) to load a smaller, fixed subsample instead of
+Pass `n_cells` (1,050 to 13,329) to load a smaller, fixed subsample instead of
 all 30,534 cells. Training time is proportional to the number of cells, so this
 is the quickest way to try cell-level integration on a CPU:
 
@@ -175,9 +216,10 @@ is the quickest way to try cell-level integration on a CPU:
 Dataset(n_cells=6000, batches=['B1', 'B2', 'B3'], modalities=[rna:1000, adt:192])
 ```
 
-The same cells are returned on every call. Each batch contributes equally, and
-every cell type of every batch keeps at least 50 cells (or all it has), so no
-cell type is lost. Donor-level prediction and attribution need enough cells per
+The same cells are returned on every call. They come from seven well-separated
+major cell types that every batch has: B_Mem, CD4_Mem, CD8_Va7.2,
+Mono_Classical, Mono_Nonclassical, NK and Plasmablast. Each batch contributes
+equally, and each of these types keeps at least 50 cells in every batch. Donor-level prediction and attribution need enough cells per
 donor, so use the full demo there.
 
 ### `m3.datasets.liu_demo_model`
@@ -254,7 +296,7 @@ Nothing is trained yet — call [`train`](#m3train).
 | `target_condition` | the single condition used for prediction / attribution (defaults to the first of `condition_keys`). |
 | `donor_key` | `obs` column identifying a donor/sample. Required for donor-level prediction, attribution, and `augment`. |
 | `celltype_key` | `obs` column with cell-type labels. Needed for the donor predictor, attribution and [`augment`](#m3augment). The cell-level model does not use it, so an embedding needs only `condition_keys` and the batch column. |
-| `batch_key` | `obs` column with the batch label (default `"batch"`). An error is raised when `obs` has no such column. It is the integration / held-out unit, the *site* the donor adversary removes, and the stratifier for [`augment(batch=...)`](#m3augment). After training, `cell_metadata["batch"]` holds this column's values. A single-batch dataset trains without batch correction and warns. The cells of one batch must all have the same modalities, so with a mosaic dataset the batches have to follow the pieces passed to [`m3.concat`](#m3concat). |
+| `batch_key` | `obs` column with the batch label (default `"batch"`). An error is raised when `obs` has no such column. It is the integration / held-out unit, the *site* the donor adversary removes, and the stratifier for [`augment(batch=...)`](#m3augment). After training, `cell_metadata["batch"]` holds this column's values. A single-batch dataset trains without batch correction and warns. The cells of one batch must all have the same modalities, so in a mosaic dataset a batch either has a modality for all its cells or for none. |
 | `held_out` | batch label(s) to hold out as an unlabelled **query** set — their `target_condition` labels are masked during training and recovered by [`predict_donors`](#m3predict_donors). |
 | `held_out_samples` | donor/sample ID(s) to hold out as the **query** set instead of a whole batch — may span batches; requires `donor_key` and is mutually exclusive with `held_out`. Their `target_condition` labels are masked during training and recovered by [`predict_donors`](#m3predict_donors). |
 | `hvg` | `{modality -> n_top}` highly-variable-feature selection, e.g. `{"rna": 1000}`. Omit to use all features as given. |

@@ -4,7 +4,7 @@ from m3.io import read_matrix, from_anndata, read_h5ad, read_h5
 from m3._concat import concat
 from m3 import datasets
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "read_matrix", "from_anndata", "read_h5ad", "read_h5", "concat",

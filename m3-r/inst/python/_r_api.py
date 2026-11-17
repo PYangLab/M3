@@ -108,8 +108,14 @@ def dataset_read_h5(rna=None, adt=None, atac=None, metadata=None, batch=None) ->
     return _put(ds)
 
 
-def dataset_read_h5ad(path, batch=None, modality="rna") -> int:
-    return _put(m3.read_h5ad(str(path), batch=_label(batch), modality=str(modality)))
+def dataset_read_h5ad(path, batch=None, modality="rna", batch_key="batch", layer=None,
+                      join="exact") -> int:
+    """path: one path, or {modality: path} (an R named list)."""
+    path = {str(k): str(v) for k, v in path.items()} if isinstance(path, dict) else str(path)
+    if isinstance(layer, dict):
+        layer = {str(k): str(v) for k, v in layer.items()}
+    return _put(m3.read_h5ad(path, batch=_label(batch), modality=str(modality),
+                             batch_key=str(batch_key), layer=layer, join=str(join)))
 
 
 def dataset_concat(handles) -> int:

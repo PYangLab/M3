@@ -52,7 +52,9 @@ assay and ADT/ATAC as `altExp`s; role columns in `colData`):
 
 ```r
 data <- m3_dataset(sce)   # batches: the colData column named by batch_key in m3_train()
-# or read paper-format HDF5 directly (big data stays in Python):
+# or one .h5ad per modality, cells matched by name (big data stays in Python):
+data <- m3_read_h5ad(list(rna = "rna.h5ad", adt = "adt.h5ad"))
+# or read paper-format HDF5 directly:
 data <- m3_concat(list(
   m3_read_h5(rna = "rna1.h5", adt = "adt1.h5", metadata = "metadata1.csv", batch = "batch1"),
   m3_read_h5(rna = "rna2.h5", adt = "adt2.h5", metadata = "metadata2.csv", batch = "batch2")
