@@ -34,10 +34,18 @@ tested on **Python 3.10 – 3.12** on Linux and macOS.
 
 === "venv"
 
-    ```bash title="terminal"
+    ```bash title="macOS / Linux"
     python3.11 -m venv .venv
     source .venv/bin/activate
     ```
+
+    ```powershell title="Windows (PowerShell)"
+    py -3.11 -m venv .venv
+    .venv\Scripts\activate
+    ```
+
+On Windows, run the conda / mamba commands in the **Anaconda Prompt** (or in a
+shell where `conda init` has been run).
 
 ---
 
@@ -47,25 +55,42 @@ M3's training engine runs on **PyTorch**, which `pip install m3-sc` pulls in
 automatically as a dependency of `captum`. Most people can skip straight to
 Step 3.
 
-=== "Default (CPU / macOS)"
+=== "No NVIDIA GPU (incl. macOS)"
 
     Nothing to do — Step 3 brings PyTorch with it. On Apple Silicon, M3 runs on
     the CPU backend.
 
-=== "Linux + CUDA 12.x"
+=== "NVIDIA GPU"
 
-    Only if you need a build matched to a specific CUDA version, install it
-    *before* Step 3 — pip will then keep the build you chose:
+    What Step 3 brings depends on the platform:
+
+    - **Linux** — the `torch` wheel on PyPI is already a CUDA build, so usually
+      there is nothing to do. It is built for the CUDA version current at that
+      PyTorch release, which needs a recent NVIDIA driver.
+    - **Windows** — the `torch` wheel on PyPI is **CPU-only**, so install a CUDA
+      build yourself.
+
+    To install a CUDA build (Windows, or Linux with an older driver), take the
+    command from the [PyTorch selector](https://pytorch.org/get-started/locally/)
+    for your platform and CUDA version, and run it *before* Step 3 — pip will
+    then keep the build you chose. It has this form:
 
     ```bash title="terminal"
-    pip install torch --index-url https://download.pytorch.org/whl/cu121
+    pip install torch --index-url https://download.pytorch.org/whl/cu<version>
     ```
+
+    The highest CUDA version your driver supports is shown in the header of
+    `nvidia-smi`.
 
 Verify, once Step 3 is done:
 
 ```bash
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
+
+On a machine with an NVIDIA GPU, `False` here means the installed `torch` is a
+CPU build or needs a newer driver than you have — install a matching CUDA build
+as in the *NVIDIA GPU* tab.
 
 ---
 
@@ -108,16 +133,7 @@ build matched to a specific CUDA version (Step 2).
 
 ---
 
-## Step 4 — Tutorial extras *(nothing to do)*
-
-The [tutorial notebooks](notebooks/py_01_representation_learning.ipynb) plot UMAPs
-and ROC curves with `scanpy`, `umap-learn` and `matplotlib`. All three arrive with
-`m3-sc`: `scanpy` is a declared dependency, and it requires `umap-learn` and
-`matplotlib` itself. There is nothing extra to install.
-
----
-
-## Step 5 — Verify the install
+## Step 4 — Verify the install
 
 ```bash title="terminal"
 python -c "import m3; print(m3.__version__)"
